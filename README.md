@@ -1,17 +1,10 @@
-# Foundly Sprint 1 — Issue #1 (Backend & Database foundation)
+# Foundly Sprint 1 — Issues #1 + #6
 
-Snapshot **giai đoạn 1**, chưa có Form/API đăng tin (Issue #6) và đánh dấu đã trả (Issue #8).
+Bản tách tối thiểu từ `Foundly Pro.zip`, lưu trong cấu trúc GitHub: `backend/`, `database/`, `docs/`, `frontend/`. Issue #8 sẽ bổ sung vào stage 3.
 
-## Cấu trúc
+## Chạy Docker
 
-- `backend/` ASP.NET Core Web API, Entity Framework Core + Auth.
-- `database/` SQL tạo 6 bảng, seed và view/trigger PostgreSQL.
-- `docs/` ERD, đối chiếu Issue #1.
-- `frontend/` thư mục chờ Issue #6.
-
-## Khởi chạy (Docker Desktop)
-
-Mở Terminal ở thư mục chứa `compose.yaml`:
+Mở Docker Desktop, terminal tại gốc (nơi có `compose.yaml`):
 
 ```powershell
 docker compose up --build -d
@@ -19,10 +12,15 @@ docker compose ps
 docker compose logs --tail=80 api
 ```
 
-- Health API: http://localhost:8081/api/health
-- PostgreSQL dùng localhost:5435, DB `lostfound`, user `lostfound`, password thử nghiệm `lostfound_dev_only`.
-- Docker volume tên `foundly-sprint1_*` riêng, không ghi đè `foundly-complete` của bản Final.
-- Khởi tạo bằng EF `EnsureCreated`, không cần chạy `01_schema.sql` để demo; script là tài liệu triển khai/kiểm tra.
-- Muốn có view/triggers: kết nối bằng DBeaver/pgAdmin và chạy `database/03_views_triggers.sql` trên DB này (sau khi bảng đã có).
+- Frontend: **http://localhost:5175**
+- API: **http://localhost:8081/api/health**
+- Database: **localhost:5435** (`lostfound` / `lostfound` / `lostfound_dev_only`)
+- Demo: `minh@campus.edu` / `Demo12345!`, `lan@campus.edu` / `Demo12345!`.
 
-Đây là demo localhost. **Không dùng thông tin đăng nhập DB và seed demo trong môi trường production.** Chưa kiểm thử Docker runtime trong môi trường tạo gói này.
+Frontend dùng cookie đăng nhập, Dropdown tự lấy `/api/items/catalog`, gửi `POST /api/items` và ảnh riêng. Các API chi tiết có trong `docs/POSTMAN.md`.
+
+**Script SQL:** `01_schema.sql` tương đương bảng mà EF `EnsureCreated` tạo khi khởi động từ cơ sở dữ liệu trống. KHÔNG chạy script `01_schema.sql` trên DB chứa dữ liệu của Final. `03_views_triggers.sql` chạy qua DBeaver hoặc psql sau khi ứng dụng đã tạo bảng.
+
+**Lưu ý:** Bản này cố ý không bao gồm thuật toán matching, claim, admin, phòng bàn giao, worker hết hạn từ Final. Code tạo bài trích từ Final nhưng bỏ lời gọi MatchEngine để module chạy độc lập. Trạng thái `RETURNED` do chủ bài bấm là mô phỏng trạng thái của Issue #8, không xác thực giao nhận thực tế.
+
+Chỉ dùng localhost để nộp/bảo vệ. **Bản này chưa được chạy E2E bằng Docker/.NET trong môi trường đóng gói; cần chạy và chụp Postman trước khi đóng Issue.**
