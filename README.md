@@ -1,32 +1,28 @@
-# LostAndFound-CMC
-# 🔍 Hệ thống Quản lý và Tìm kiếm Đồ thất lạc (Lost & Found System)
+# Foundly Sprint 1 — Issue #1 (Backend & Database foundation)
 
-## 📖 Giới thiệu
-**Hệ thống Quản lý và Tìm kiếm Đồ thất lạc** là một ứng dụng phần mềm được phát triển nhằm hỗ trợ sinh viên, giảng viên và cán bộ nhân viên trong khuôn viên Trường Đại học CMC dễ dàng đăng tải thông tin, tìm kiếm và nhận lại các vật dụng bị đánh rơi. 
+Snapshot **giai đoạn 1**, chưa có Form/API đăng tin (Issue #6) và đánh dấu đã trả (Issue #8).
 
-Dự án được thực hiện trong khuôn khổ môn học **Công nghệ phần mềm**, áp dụng quy trình phát triển Agile/Scrum để quản lý vòng đời phần mềm.
+## Cấu trúc
 
-## ✨ Tính năng nổi bật
+- `backend/` ASP.NET Core Web API, Entity Framework Core + Auth.
+- `database/` SQL tạo 6 bảng, seed và view/trigger PostgreSQL.
+- `docs/` ERD, đối chiếu Issue #1.
+- `frontend/` thư mục chờ Issue #6.
 
-### 👤 Dành cho Người dùng (Sinh viên/Giảng viên):
-- **Báo mất đồ (Lost):** Đăng tải thông tin chi tiết (hình ảnh, mô tả, vị trí nghi ngờ rơi, thời gian) về vật dụng bị mất.
-- **Nhặt được đồ (Found):** Đăng tin thông báo nhặt được đồ vật, hỗ trợ người mất có thể liên hệ để nhận lại.
-- **Tìm kiếm thông minh:** Lọc tin đăng theo danh mục (Ví, thẻ sinh viên, thiết bị điện tử, chìa khóa...), thời gian hoặc khu vực tòa nhà.
-- **Quản lý trạng thái:** Cập nhật trạng thái bài đăng cá nhân (Đang tìm kiếm, Đã tìm thấy, Đã trao trả).
+## Khởi chạy (Docker Desktop)
 
-### 🛡️ Dành cho Quản trị viên (Admin):
-- **Kiểm duyệt nội dung:** Phê duyệt hoặc từ chối các bài đăng để đảm bảo thông tin chính xác, tránh nội dung rác.
-- **Quản lý danh mục & người dùng:** Thêm/sửa/xóa các danh mục đồ vật, quản lý hoặc khóa các tài khoản có hành vi vi phạm.
+Mở Terminal ở thư mục chứa `compose.yaml`:
 
-## 🛠 Công nghệ sử dụng
-*(Lưu ý: Xóa hoặc sửa các công nghệ dưới đây cho đúng với project của nhóm)*
-- **Frontend:** HTML5, CSS3, JavaScript 
-- **Backend:** Node.js / C++ / Java
-- **Cơ sở dữ liệu:** SQL Server (Thiết kế chuẩn hóa 3NF)
-- **Quản lý mã nguồn & Tiến độ:** Git, GitHub (Pull Request, Branching), Kanban Board.
+```powershell
+docker compose up --build -d
+docker compose ps
+docker compose logs --tail=80 api
+```
 
-## 🚀 Hướng dẫn cài đặt và chạy dự án
+- Health API: http://localhost:8081/api/health
+- PostgreSQL dùng localhost:5435, DB `lostfound`, user `lostfound`, password thử nghiệm `lostfound_dev_only`.
+- Docker volume tên `foundly-sprint1_*` riêng, không ghi đè `foundly-complete` của bản Final.
+- Khởi tạo bằng EF `EnsureCreated`, không cần chạy `01_schema.sql` để demo; script là tài liệu triển khai/kiểm tra.
+- Muốn có view/triggers: kết nối bằng DBeaver/pgAdmin và chạy `database/03_views_triggers.sql` trên DB này (sau khi bảng đã có).
 
-1. **Clone dự án về máy tính:**
-   ```bash
-   git clone https://github.com/realer86/LostAndFound-CMC.git
+Đây là demo localhost. **Không dùng thông tin đăng nhập DB và seed demo trong môi trường production.** Chưa kiểm thử Docker runtime trong môi trường tạo gói này.
