@@ -114,6 +114,24 @@
           "raw": "{\n  \"type\": \"LOST\",\n  \"itemName\": \"Ví thử nghiệm Sprint 1\",\n  \"description\": \"Postman create test\",\n  \"categoryId\": null,\n  \"locationId\": null,\n  \"eventTime\": \"{{eventTime}}\"\n}"
         }
       }
+    },
+    {
+      "name": "05 PATCH returned – Issue #8",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/items/{{itemId}}/status"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 Returned', () => pm.response.to.have.status(200));",
+              "pm.test('Status RETURNED', () => pm.expect(pm.response.json().status).to.eql('RETURNED')); "
+            ]
+          }
+        }
+      ]
     }
   ]
 }

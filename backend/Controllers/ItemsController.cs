@@ -64,7 +64,7 @@ public class ItemsController(LostFoundDb db) : ControllerBase
         page = Math.Max(page, 1); pageSize = Math.Clamp(pageSize, 1, 40);
         var query = db.Reports.AsNoTracking().Include(x => x.Images)
             .Include(x => x.Category).Include(x => x.Location)
-            .Where(x => x.Status == "OPEN");
+            .Where(x => x.Status == "OPEN" || x.Status == "RETURNED");
         if (type is "LOST" or "FOUND") query = query.Where(x => x.Type == type);
         if (categoryId.HasValue) query = query.Where(x => x.CategoryId == categoryId);
         if (locationId.HasValue) query = query.Where(x => x.LocationId == locationId);
@@ -94,7 +94,7 @@ public class ItemsController(LostFoundDb db) : ControllerBase
         var r = await db.Reports.AsNoTracking().Include(x => x.Images)
             .Include(x => x.Location).Include(x => x.Category)
             .FirstOrDefaultAsync(x => x.Id == id);
-        if (r is null || (r.Status != "OPEN" && r.UserId != UserId && !Admin))
+        if (r is null || (r.Status is not ("OPEN" or "RETURNED") && r.UserId != UserId && !Admin))
             return NotFound(new { message = "Không tìm thấy bài." });
         return Ok(PublicReport(r));
     }
@@ -115,4 +115,20 @@ public class ItemsController(LostFoundDb db) : ControllerBase
         return Created($"/api/items/{entity.Id}",
             new { id = entity.Id, message = "Đăng tin thành công." });
     }
+    // Issue #8: Người tạo bài có thể đánh dấu đã hoàn trả trên bản Sprint 1.
+    // Bản Final có quy trình xác minh bàn giao hai bên; route này là bản tối giản.
+    [Authorize, HttpPatch("{id:guid}/status")]
+    public async Task<IActionResult> MarkReturned(Guid id)
+    {
+        var entity = await db.Reports.FindAsync(id);
+        if (entity is null) return NotFound(new { message = "Bài đăng không tồn tại." });
+        if (entity.UserId != UserId) return Forbid();
+        if (entity.Status != "OPEN")
+            return Conflict(new { message = "Chỉ bài đang mở mới được đánh dấu đã trả." });
+        entity.Status = "RETURNED";
+        entity.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        return Ok(new { id = entity.Id, status = entity.Status, message = "Đã đánh dấu hoàn trả." });
+    }
+
 }

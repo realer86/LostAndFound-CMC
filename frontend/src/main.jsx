@@ -55,13 +55,19 @@ function App(){
     </main>
     {showAuth&&<AuthModal onClose={()=>setShowAuth(false)} onSuccess={u=>{setMe(u);setShowAuth(false);notify('Đăng nhập thành công')}} notify={notify} request={request}/>}
     {showPost&&<PostModal type={showPost} catalog={catalog} onClose={()=>setShowPost(null)} notify={notify} request={request} onCreated={async()=>{setShowPost(null);await load()}}/>}
-    {selected&&<DetailModal report={selected} me={me} onClose={()=>setSelected(null)} onAuth={()=>{setSelected(null);setShowAuth(true)}}/>}
+    {selected&&<DetailModal report={selected} me={me} onClose={()=>setSelected(null)} onAuth={()=>{setSelected(null);setShowAuth(true)}}
+      onMarkReturned={()=>request(async()=>{
+        if(!window.confirm('Xác nhận bạn đã nhận/trả lại vật phẩm?'))return;
+        const result=await api(`/items/${selected.id}/status`,{method:'PATCH'});
+        setSelected(prev=>prev?{...prev,status:result.status}:null);
+        await load();notify('Bài đăng đã được đánh dấu Đã trả');
+      })}/> }
     {notice&&<div className={'toast '+(notice.error?'error':'')}>{notice.message}<button onClick={()=>setNotice(null)}><X size={16}/></button></div>}
     {busy&&<span className="working">Đang xử lý...</span>}
   </div>
 }
 
-function ReportCard({report:r,onClick}){const cover=r.images?.[0];return <button className="reportcard" onClick={onClick}><div className={'cardphoto '+(isFound(r.type)?'aqua':'sand')}>{cover?<img src={cover} alt={r.itemName} loading="lazy"/>:<div className="itememoji">{r.category==='Điện tử'?'📱':r.category==='Giấy tờ'?'🪪':r.category==='Ví & túi'?'👛':r.category==='Chìa khóa'?'🔑':'🎒'}</div>}<span className={'reportbadge '+(isFound(r.type)?'found':'lost')}>{isFound(r.type)?'ĐÃ NHẶT ĐƯỢC':'ĐANG TÌM'}</span></div><div className="cardbody"><div className="cardmeta"><span>{r.category||'Vật dụng khác'}</span><span>·</span><span>{time(r.createdAt).split(',')[0]}</span></div><h3>{r.itemName}</h3><p>{r.description||'Chưa có mô tả bổ sung.'}</p><div className="cardbottom"><span><MapPin size={15}/> {r.location||r.locationDetail||'Chưa rõ khu vực'}</span><ArrowUpRight size={17}/></div></div></button>}
+function ReportCard({report:r,onClick}){const cover=r.images?.[0];return <button className={'reportcard '+(r.status==='RETURNED'?'returned-card':'')} onClick={onClick}><div className={'cardphoto '+(isFound(r.type)?'aqua':'sand')}>{cover?<img src={cover} alt={r.itemName} loading="lazy"/>:<div className="itememoji">{r.category==='Điện tử'?'📱':r.category==='Giấy tờ'?'🪪':r.category==='Ví & túi'?'👛':r.category==='Chìa khóa'?'🔑':'🎒'}</div>}<span className={'reportbadge '+(r.status==='RETURNED'?'returned':(isFound(r.type)?'found':'lost'))}>{r.status==='RETURNED'?'ĐÃ TRẢ':(isFound(r.type)?'ĐÃ NHẶT ĐƯỢC':'ĐANG TÌM')}</span></div><div className="cardbody"><div className="cardmeta"><span>{r.category||'Vật dụng khác'}</span><span>·</span><span>{time(r.createdAt).split(',')[0]}</span></div><h3>{r.itemName}</h3><p>{r.description||'Chưa có mô tả bổ sung.'}</p><div className="cardbottom"><span><MapPin size={15}/> {r.location||r.locationDetail||'Chưa rõ khu vực'}</span><ArrowUpRight size={17}/></div></div></button>}
 
 function Modal({children,onClose,wide}){useEffect(()=>{const f=e=>{if(e.key==='Escape')onClose()};document.addEventListener('keydown',f);document.body.style.overflow='hidden';return()=>{document.removeEventListener('keydown',f);document.body.style.overflow=''}},[onClose]);return <div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className={'modal '+(wide?'wide':'')}><button className="modalclose" onClick={onClose}><X size={19}/></button>{children}</div></div>}
 function AuthModal({onClose,onSuccess,notify,request}){
@@ -106,14 +112,14 @@ function PostModal({type,catalog,onClose,notify,request,onCreated}){
  </form></Modal>
 }
 
-function DetailModal({report:r,me,onClose,onAuth}){
+function DetailModal({report:r,me,onClose,onAuth,onMarkReturned}){
   return <Modal wide onClose={onClose}>
     <div className="detailgrid"><div className="detailvisual">{r.images?.length?<img src={r.images[0]} alt={r.itemName}/>:<div className="detailplaceholder">{isFound(r.type)?'📦':'🎒'}</div>}</div>
-      <div className="detailbody"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><h2>{r.itemName}</h2>
+      <div className="detailbody"><span className={'status '+r.status.toLowerCase()}>{r.status==='RETURNED'?'ĐÃ TRẢ':r.status}</span><h2>{r.itemName}</h2>
       <p><MapPin size={16}/> {r.location||r.locationDetail||'Chưa rõ địa điểm'}</p>
       <p><CalendarDays size={16}/> {time(r.eventTime)}</p>
       <p><strong>Danh mục:</strong> {r.category||'Khác'}</p><p>{r.description||'Chưa có mô tả bổ sung.'}</p>
-      {/* ISSUE-08 DETAIL ACTION */}
+      {me?.id===r.userId&&r.status==='OPEN'&&<button className="btn primary" onClick={onMarkReturned}><PackageCheck size={17}/> Đánh dấu đã trả đồ</button>}
       {!me&&<button className="btn outline" onClick={onAuth}>Đăng nhập</button>}
     </div></div>
   </Modal>
