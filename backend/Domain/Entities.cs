@@ -77,3 +77,39 @@ public class CaseTicket
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ResolvedAt { get; set; }
 }
+
+
+// Issue #13: chat ẩn danh theo từng bài đăng; KHÔNG lưu email/SĐT vào bảng này.
+public class AnonymousMessage
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ReportId { get; set; }
+    public Guid SenderId { get; set; }
+    public Guid RecipientId { get; set; }
+    [MaxLength(2000)] public string Content { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Issue #13: danh bạ NỘI BỘ của bảo vệ / ban quản lý, không phải số cá nhân.
+public class OfficeDirectoryEntry
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    [MaxLength(24)] public string Type { get; set; } = "SECURITY"; // SECURITY | MANAGEMENT
+    [MaxLength(120)] public string Name { get; set; } = "";
+    [MaxLength(200)] public string Location { get; set; } = "";
+    [MaxLength(30)] public string InternalPhone { get; set; } = "";
+    [MaxLength(350)] public string WorkingSchedule { get; set; } = "";
+    [MaxLength(600)] public string DutiesByTime { get; set; } = "";
+}
+
+// Issue #17: SecretText chỉ lộ cho CHỦ bài qua endpoint được bảo vệ.
+public class ItemClaim
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ItemId { get; set; }
+    public Guid ClaimerId { get; set; }
+    [MaxLength(4000)] public string SecretText { get; set; } = "";
+    [MaxLength(16)] public string Status { get; set; } = "PENDING";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ReviewedAt { get; set; }
+}

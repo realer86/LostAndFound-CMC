@@ -12,10 +12,30 @@ public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(opti
     public DbSet<ItemReport> Reports => Set<ItemReport>();
     public DbSet<ItemImage> Images => Set<ItemImage>();
     public DbSet<CaseTicket> CaseTickets => Set<CaseTicket>();
+    public DbSet<AnonymousMessage> Messages => Set<AnonymousMessage>();
+    public DbSet<OfficeDirectoryEntry> OfficeDirectory => Set<OfficeDirectoryEntry>();
+    public DbSet<ItemClaim> Claims => Set<ItemClaim>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<AppUser>().HasIndex(x => x.Email).IsUnique();
+        b.Entity<AnonymousMessage>().ToTable("Messages", t =>
+            t.HasCheckConstraint("CK_Messages_DifferentUsers", "\"SenderId\" <> \"RecipientId\""));
+        b.Entity<AnonymousMessage>().HasIndex(x => new { x.ReportId, x.CreatedAt });
+        b.Entity<AnonymousMessage>().HasIndex(x => new { x.RecipientId, x.CreatedAt });
+        b.Entity<AnonymousMessage>().HasOne<ItemReport>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AnonymousMessage>().HasOne<AppUser>().WithMany().HasForeignKey(x => x.SenderId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<AnonymousMessage>().HasOne<AppUser>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<OfficeDirectoryEntry>().HasIndex(x => x.Name).IsUnique();
+        b.Entity<OfficeDirectoryEntry>().ToTable("OfficeDirectory", t =>
+            t.HasCheckConstraint("CK_OfficeDirectory_Type", "\"Type\" IN ('SECURITY', 'MANAGEMENT')"));
+        b.Entity<ItemClaim>().HasIndex(x => new { x.ItemId, x.ClaimerId }).IsUnique();
+        b.Entity<ItemClaim>().HasIndex(x => x.ItemId)
+            .HasDatabaseName("UX_Claims_OnlyOneApproved").IsUnique().HasFilter("\"Status\" = 'APPROVED'");
+        b.Entity<ItemClaim>().HasOne<ItemReport>().WithMany().HasForeignKey(x => x.ItemId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<ItemClaim>().HasOne<AppUser>().WithMany().HasForeignKey(x => x.ClaimerId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<ItemClaim>().ToTable("Claims", t =>
+            t.HasCheckConstraint("CK_Claims_Status", "\"Status\" IN ('PENDING', 'APPROVED', 'REJECTED')"));
         b.Entity<CaseTicket>().HasIndex(x => new { x.Status, x.CreatedAt });
         b.Entity<CaseTicket>().HasOne(x => x.Reporter).WithMany().HasForeignKey(x => x.ReporterId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<CaseTicket>().HasOne<ItemReport>().WithMany().HasForeignKey(x => x.ReportId).OnDelete(DeleteBehavior.SetNull);

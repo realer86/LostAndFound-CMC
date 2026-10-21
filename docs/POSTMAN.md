@@ -66,3 +66,9 @@ Nếu lỗi 401: đăng nhập và kiểm tra cookie trong Postman. Nếu lỗi 
 - GET `/api/items` sau PATCH → bài có nhãn `RETURNED` để giao diện hiển thị màu xanh / mờ.
 
 **Không đánh dấu tiêu chí kiểm thử là "đã chạy" cho đến khi có ảnh/log Postman thật.**
+
+## Sprint 2/3 — Issue #13 và #17
+
+Import `docs/Foundly_Issues_13_17.postman_collection.json`, chạy lần lượt các request; Postman phải lưu cookie login theo host `localhost:8081`. Xem thêm `docs/ISSUE-13.md` và `docs/ISSUE-17.md`.
+
+Hoặc chạy `python tests/smoke_api.py` sau khi Docker đã khởi động (sử dụng 3 user demo Minh, Lan, Bảo). **Kết quả nghiệm thu không được giả định nếu chưa thực sự chạy.**

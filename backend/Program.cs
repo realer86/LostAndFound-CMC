@@ -3,6 +3,7 @@ using LostFound.Api.Domain;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using LostFound.Api.Data.Migrations;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
@@ -67,6 +68,10 @@ await using (var scope = app.Services.CreateAsyncScope())
         try { await db.Database.EnsureCreatedAsync(); break; }
         catch when (i < attempts - 1) { await Task.Delay(2000); }
     }
+    // EnsureCreated không bổ sung bảng vào database đã tồn tại (Sprint 1).
+    // Chạy upgrade idempotent để giữ Users/Reports/Images và dữ liệu cũ.
+    await Sprint23SchemaUpgrade.ApplyAsync(db);
+
     // Sửa vấn đề seed liên kết trong Final: mỗi danh mục/khu vực được kiểm tra độc lập.
     if (!await db.Categories.AnyAsync())
     {
@@ -86,7 +91,8 @@ await using (var scope = app.Services.CreateAsyncScope())
         var demoUsers = new[]
         {
             ("minh@campus.edu", "Minh - Người mất đồ", "Demo12345!"),
-            ("lan@campus.edu", "Lan - Người nhặt đồ", "Demo12345!")
+            ("lan@campus.edu", "Lan - Người nhặt đồ", "Demo12345!"),
+            ("bao@campus.edu", "Bảo - Người xin nhận thứ hai", "Demo12345!")
         };
         foreach (var (email, name, password) in demoUsers)
         {
@@ -96,6 +102,14 @@ await using (var scope = app.Services.CreateAsyncScope())
             db.Users.Add(user);
         }
         await db.SaveChangesAsync();
+        // Mẫu giả định để demo; cần thay theo phòng ban đã được trường xác nhận.
+        if (!await db.OfficeDirectory.AnyAsync())
+        {
+            db.OfficeDirectory.AddRange(
+                new OfficeDirectoryEntry { Type = "SECURITY", Name = "Quầy bảo vệ tòa A (demo)", Location = "Sảnh tòa A", InternalPhone = "101", WorkingSchedule = "Thứ 2–Thứ 7: 07:00–19:00", DutiesByTime = "07:00–12:00: trực khu vực cổng; 13:00–19:00: tiếp nhận đồ nhặt được (demo)" },
+                new OfficeDirectoryEntry { Type = "MANAGEMENT", Name = "Ban quản lý sinh viên (demo)", Location = "Tầng 1, tòa hành chính", InternalPhone = "102", WorkingSchedule = "Thứ 2–Thứ 6: 08:00–17:00", DutiesByTime = "08:00–11:30: tiếp nhận phản ánh; 13:30–17:00: giải quyết hồ sơ (demo)" });
+            await db.SaveChangesAsync();
+        }
     }
 }
 app.Run();

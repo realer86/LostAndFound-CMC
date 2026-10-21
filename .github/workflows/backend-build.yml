@@ -1,0 +1,20 @@
+name: Build Foundly Backend
+on:
+  push:
+    paths: ["backend/**", "tests/**", ".github/workflows/backend-build.yml"]
+  pull_request:
+    paths: ["backend/**", "tests/**", ".github/workflows/backend-build.yml"]
+jobs:
+  dotnet-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore
+        run: dotnet restore backend/LostFound.Api.csproj
+      - name: Build Release
+        run: dotnet build backend/LostFound.Api.csproj -c Release --no-restore
+      - name: Validate smoke test syntax
+        run: python3 -m py_compile tests/smoke_api.py
