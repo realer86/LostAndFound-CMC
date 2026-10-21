@@ -1,3 +1,4 @@
+import ChatLogic from './components/ChatLogic';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Search, Plus, MapPin, ArrowUpRight, ArrowRight, PackageOpen, PackageCheck, ShieldCheck,
@@ -129,5 +130,4 @@ function DetailModal({report:r,me,onClose,onAuth,onMarkReturned,onChat}){
     </div></div>
   </Modal>
 }
-
-createRoot(document.getElementById('root')).render(<App/>);
+createRoot(document.getElementById('root')).render(<><App/><ChatLogic/></>);
