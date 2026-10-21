@@ -108,8 +108,21 @@ def main():
 
     contacts = owner.call('GET', '/api/contacts')
     directory = owner.call('GET', '/api/contacts/directory')
-    verify(len(contacts['people']) >= 2, 'Contacts include participants of shared report')
-    verify(len(directory) >= 2, 'Development directory contains internal offices')
+verify(
+    any(
+        p['itemId'] == item_id and p['otherUserId'] == lan_id
+        for p in contacts['people']
+    ),
+    'Approved claimant appears in contacts'
+)
+
+verify(
+    not any(
+        p['itemId'] == item_id and p['otherUserId'] == bao_id
+        for p in contacts['people']
+    ),
+    'Rejected claimant without chat is absent from contacts'
+)    verify(len(directory) >= 2, 'Development directory contains internal offices')
     payload = json.dumps(contacts, ensure_ascii=False)
     verify('@campus.edu' not in payload and '0987654321' not in payload,
            'Contacts response contains no personal email or phone')
