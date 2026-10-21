@@ -1,115 +1,119 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 const PostForm = () => {
-  // 1. Khởi tạo State lưu danh sách Dropdown và Dữ liệu Form
-  const [categories, setCategories] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [message, setMessage] = useState(''); // Chứa thông báo thành công/lỗi
-  
+  // State lưu dữ liệu form
   const [formData, setFormData] = useState({
     itemName: '',
-    description: '',
-    categoryId: '',
     locationId: '',
-    type: 'LOST' // LOST (mất đồ) hoặc FOUND (nhặt được)
+    imageFile: null
   });
 
-  // 2. Logic GET API: Lấy dữ liệu Danh mục và Khu vực khi vừa vào trang
-  useEffect(() => {
-    // Lưu ý: Đổi URL này cho khớp với port Backend chạy thật của nhóm bạn
-    fetch('http://localhost:5000/api/categories')
-      .then(res => res.json())
-      .then(data => setCategories(data))
-      .catch(err => console.log("Lỗi fetch categories", err));
+  // State lưu thông báo lỗi
+  const [errors, setErrors] = useState({});
 
-    fetch('http://localhost:5000/api/locations')
-      .then(res => res.json())
-      .then(data => setLocations(data))
-      .catch(err => console.log("Lỗi fetch locations", err));
-  }, []);
-
-  // Hàm cập nhật dữ liệu khi người dùng gõ/chọn
+  // Xử lý khi input thay đổi
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // 3. Logic POST API: Bấm nút Submit
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  // Xử lý khi upload file
+  const handleFileChange = (e) => {
+    setFormData({ ...formData, imageFile: e.target.files[0] });
+  };
 
-    // Validation: Không cho bỏ trống (Tiêu chí nghiệm thu)
-    if (!formData.itemName || !formData.categoryId || !formData.locationId) {
-      setMessage('❌ Vui lòng điền đầy đủ Tên đồ vật, Danh mục và Khu vực!');
+  // Xử lý sự kiện Submit form
+  const handleSubmit = async (e) => {
+    e.preventDefault(); // Ngăn form reload lại trang
+    let newErrors = {};
+
+    // 1. Validation (Bắt lỗi đầu vào theo yêu cầu)
+    if (!formData.itemName.trim()) {
+      newErrors.itemName = "Bắt buộc nhập tên đồ vật!";
+    }
+    
+    if (!formData.locationId) {
+      newErrors.locationId = "Bắt buộc chọn khu vực/tòa nhà!";
+    }
+
+    if (formData.imageFile) {
+      // Kiểm tra định dạng file ảnh (chỉ cho phép jpg/png)
+      const validTypes = ['image/jpeg', 'image/png'];
+      if (!validTypes.includes(formData.imageFile.type)) {
+        newErrors.imageFile = "Định dạng ảnh không hợp lệ (chỉ nhận .jpg hoặc .png)!";
+      }
+    }
+
+    // Nếu có lỗi -> Cập nhật state để hiển thị cảnh báo đỏ và dừng thực thi
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
       return;
     }
 
+    // Xóa lỗi cũ nếu form hợp lệ
+    setErrors({});
+    
+    // Log ra console chuẩn xác theo tiêu chí nghiệm thu
+    console.log("✅ Submit form hợp lệ. Dữ liệu chuẩn bị gửi đi:", formData);
+
+    // 2. Chuẩn bị luồng ghép nối API (Chờ Backend cung cấp Endpoint)
+    /* 
     try {
-      const response = await fetch('http://localhost:5000/api/items', {
+      // Vì có file ảnh, phải dùng FormData thay vì JSON
+      const payload = new FormData();
+      payload.append('itemName', formData.itemName);
+      payload.append('locationId', formData.locationId);
+      if (formData.imageFile) {
+        payload.append('image', formData.imageFile);
+      }
+
+      // Hàm fetch cấu hình sẵn gọi API
+      const response = await fetch('URL_BACKEND_API/items', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData) // Gửi dữ liệu form xuống Backend
+        body: payload
       });
 
-      if (response.status === 201) {
-        setMessage('✅ Đăng tin thành công!'); // Hiển thị Toast/Popup
-        // Code làm sạch form ở đây nếu cần
-      } else {
-        setMessage('❌ Đăng tin thất bại, vui lòng kiểm tra lại.');
+      if (response.ok) {
+        console.log("Đăng bài thành công!");
       }
     } catch (error) {
-      setMessage('❌ Lỗi kết nối Server.');
+      console.error("Lỗi gọi API:", error);
     }
+    */
   };
 
-  // 4. UI: Giao diện Form (Sử dụng CSS thuần hoặc TailwindCSS để Responsive)
   return (
-    <div style={{ maxWidth: '500px', margin: '0 auto', padding: '20px' }}>
-      <h2>Đăng tin thất lạc</h2>
-      
-      {message && (
-        <div style={{ padding: '10px', marginBottom: '15px', backgroundColor: message.includes('✅') ? '#d4edda' : '#f8d7da' }}>
-          {message}
-        </div>
-      )}
-
+    <div style={{ maxWidth: '400px', margin: '20px auto', fontFamily: 'sans-serif' }}>
+      <h3>Form Đăng Tin (Logic Xử lý)</h3>
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
         
         {/* Tên đồ vật */}
         <div>
           <label>Tên đồ vật *</label>
-          <input type="text" name="itemName" value={formData.itemName} onChange={handleChange} style={{ width: '100%', padding: '8px' }} />
+          <input type="text" name="itemName" onChange={handleChange} style={{ width: '100%', padding: '8px' }} />
+          {/* Hiển thị cảnh báo đỏ nếu có lỗi */}
+          {errors.itemName && <span style={{ color: 'red', fontSize: '12px' }}>{errors.itemName}</span>}
         </div>
 
-        {/* Dropdown Danh mục */}
+        {/* Khu vực/Tòa nhà */}
         <div>
-          <label>Danh mục *</label>
-          <select name="categoryId" value={formData.categoryId} onChange={handleChange} style={{ width: '100%', padding: '8px' }}>
-            <option value="">-- Chọn danh mục --</option>
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Dropdown Khu vực */}
-        <div>
-          <label>Tòa nhà / Khu vực *</label>
-          <select name="locationId" value={formData.locationId} onChange={handleChange} style={{ width: '100%', padding: '8px' }}>
+          <label>Khu vực / Tòa nhà *</label>
+          <select name="locationId" onChange={handleChange} style={{ width: '100%', padding: '8px' }}>
             <option value="">-- Chọn khu vực --</option>
-            {locations.map(loc => (
-              <option key={loc.id} value={loc.id}>{loc.name}</option>
-            ))}
+            <option value="1">Tòa nhà Vạn Phúc</option>
+            <option value="2">Khuôn viên Trường ĐH CMC</option>
           </select>
+          {errors.locationId && <span style={{ color: 'red', fontSize: '12px' }}>{errors.locationId}</span>}
         </div>
 
-        {/* Mô tả */}
+        {/* File ảnh */}
         <div>
-          <label>Mô tả chi tiết</label>
-          <textarea name="description" value={formData.description} onChange={handleChange} rows="4" style={{ width: '100%', padding: '8px' }}></textarea>
+          <label>Hình ảnh đính kèm (jpg/png)</label>
+          <input type="file" accept="image/png, image/jpeg" onChange={handleFileChange} style={{ width: '100%' }} />
+          {errors.imageFile && <span style={{ color: 'red', fontSize: '12px', display: 'block' }}>{errors.imageFile}</span>}
         </div>
 
-        <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#007bff', color: 'white', border: 'none', cursor: 'pointer' }}>
-          Đăng Tin
+        <button type="submit" style={{ padding: '10px', backgroundColor: '#0056b3', color: 'white', border: 'none', cursor: 'pointer' }}>
+          Gửi dữ liệu
         </button>
       </form>
     </div>
