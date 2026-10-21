@@ -1,0 +1,12 @@
+**/node_modules/
+**/dist/
+**/bin/
+**/obj/
+.env
+*.user
+.vscode/
+
+*.zip
+*.log
+**/.env.*
+!**/.env.example

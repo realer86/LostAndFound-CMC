@@ -1,0 +1,40 @@
+name: foundly-sprint1
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: lostfound
+      POSTGRES_USER: lostfound
+      POSTGRES_PASSWORD: lostfound_dev_only
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - foundly_sprint1_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lostfound -d lostfound"]
+      interval: 3s
+      retries: 20
+  api:
+    build: ./backend
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Main: "Host=postgres;Port=5432;Database=lostfound;Username=lostfound;Password=lostfound_dev_only"
+      AllowedEmailDomain: ""
+    ports:
+      - "127.0.0.1:8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - foundly_sprint1_uploads:/app/wwwroot/uploads
+  web:
+    build: ./frontend
+    environment:
+      API_PROXY_TARGET: http://api:8080
+    ports:
+      - "127.0.0.1:5175:5175"
+    depends_on:
+      - api
+volumes:
+  foundly_sprint1_db:
+  foundly_sprint1_uploads:
