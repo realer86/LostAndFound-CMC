@@ -1,0 +1,15 @@
+# Thư mục thư viện (rất nặng, không bao giờ push lên)
+node_modules/
+vendor/
+
+# File cấu hình chứa mật khẩu/chuỗi kết nối Database
+.env
+
+# File rác của hệ điều hành
+.DS_Store
+Thumbs.db
+
+# File build hoặc file chạy
+dist/
+build/
+*.exe
