@@ -8,4 +8,7 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0"><PrivateAssets>all</PrivateAssets></PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="DatabaseScripts/*.sql" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+  </ItemGroup>
 </Project>

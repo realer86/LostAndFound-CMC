@@ -77,3 +77,43 @@ public class CaseTicket
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ResolvedAt { get; set; }
 }
+
+// Sprint 2 #13: hội thoại ẩn danh theo bài đăng. Chỉ hai thành viên được đọc.
+public class ChatContact
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ReportId { get; set; }
+    public ItemReport? Report { get; set; }
+    public Guid OwnerId { get; set; }
+    public AppUser? Owner { get; set; }
+    public Guid VisitorId { get; set; }
+    public AppUser? Visitor { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? LastMessageAt { get; set; }
+}
+
+public class ChatMessage
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ContactId { get; set; }
+    public ChatContact? Contact { get; set; }
+    public Guid ReportId { get; set; }
+    public Guid SenderId { get; set; }
+    public AppUser? Sender { get; set; }
+    public Guid RecipientId { get; set; }
+    public AppUser? Recipient { get; set; }
+    [MaxLength(1500)] public string Content { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Directory is a public CAMPUS listing, not users' private contact details.
+public class CampusDirectoryEntry
+{
+    public int Id { get; set; }
+    [MaxLength(120)] public string Name { get; set; } = "";
+    [MaxLength(200)] public string Location { get; set; } = "";
+    [MaxLength(40)] public string InternalPhone { get; set; } = "";
+    [MaxLength(140)] public string OfficeHours { get; set; } = "";
+    [MaxLength(30)] public string Category { get; set; } = "Khác";
+    public bool IsActive { get; set; } = true;
+}
