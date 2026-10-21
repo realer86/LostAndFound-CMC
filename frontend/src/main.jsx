@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Search, Plus, MapPin, ArrowUpRight, ArrowRight, PackageOpen, PackageCheck, ShieldCheck,
-  LogOut, X, Images, LockKeyhole, CalendarDays } from 'lucide-react';
+  LogOut, X, Images, LockKeyhole, CalendarDays, MessageCircle } from 'lucide-react';
 import './style.css';
+import Sprint2ContactsView from './components/Sprint2ContactsView.jsx';
 
 // Giữ nguyên helper fetch/cookie từ Final; Vite proxy giúp dùng cùng origin.
 async function api(path, options={}) {
@@ -22,6 +23,7 @@ function App(){
   const [reports,setReports]=useState([]),[mine,setMine]=useState([]);
   const [catalog,setCatalog]=useState({categories:[],locations:[]});
   const [selected,setSelected]=useState(null),[showAuth,setShowAuth]=useState(false),[showPost,setShowPost]=useState(null);
+  const [chatReport,setChatReport]=useState(null);
   const [tab,setTab]=useState('discover'),[filter,setFilter]=useState('ALL'),[search,setSearch]=useState('');
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null);
   const notify=(message,error=false)=>setNotice({message,error});
@@ -43,25 +45,27 @@ function App(){
   return <div className="app">
     <header className="topbar"><div className="container topinner">
       <button className="brand" onClick={()=>setTab('discover')}><span className="brandmark"><PackageOpen size={22}/></span>found<span className="brandhighlight">ly</span><small> Campus · Sprint 1</small></button>
-      <nav className="nav"><button className={tab==='discover'?'active':''} onClick={()=>setTab('discover')}>Trang chủ</button><button className={tab==='mine'?'active':''} onClick={()=>me?setTab('mine'):setShowAuth(true)}>Bài đăng của tôi</button></nav>
+      <nav className="nav"><button className={tab==='discover'?'active':''} onClick={()=>setTab('discover')}>Trang chủ</button><button className={tab==='mine'?'active':''} onClick={()=>me?setTab('mine'):setShowAuth(true)}>Bài đăng của tôi</button><button className={tab==='contacts'?'active':''} onClick={()=>setTab('contacts')}>Liên hệ & Danh bạ</button></nav>
       <div className="topactions">{me?<><span>{me.fullName}</span><button className="btn outline" disabled={busy} onClick={logout}><LogOut size={16}/> Đăng xuất</button></>:<button className="btn outline" onClick={()=>setShowAuth(true)}>Đăng nhập / Đăng ký</button>}</div>
     </div></header>
-    <main className="container"><section className="hero"><span className="kicker">FOUNDLY · LOST & FOUND</span><h1>Đăng tin và tìm đồ thất lạc</h1><p>Demo Sprint 1: cơ sở dữ liệu, API đăng tin và Form với danh mục / khu vực.</p><div className="hero-actions"><button className="btn primary" onClick={()=>post('LOST')}><Plus size={17}/> Tôi bị mất đồ</button><button className="btn outline" onClick={()=>post('FOUND')}><PackageCheck size={17}/> Tôi nhặt được đồ</button></div></section>
+    <main className="container">{tab==='contacts' ? <Sprint2ContactsView /> : <><section className="hero"><span className="kicker">FOUNDLY · LOST & FOUND</span><h1>Đăng tin và tìm đồ thất lạc</h1><p>Demo Sprint 1: cơ sở dữ liệu, API đăng tin và Form với danh mục / khu vực.</p><div className="hero-actions"><button className="btn primary" onClick={()=>post('LOST')}><Plus size={17}/> Tôi bị mất đồ</button><button className="btn outline" onClick={()=>post('FOUND')}><PackageCheck size={17}/> Tôi nhặt được đồ</button></div></section>
       <section className="feed"><div className="sectionheading"><div><span className="kicker">{tab==='mine'?'CỦA BẠN':'BÀI ĐĂNG MỚI'}</span><h2>{tab==='mine'?'Bài đăng của tôi':'Khám phá bài đăng'}</h2></div><button className="btn outline" onClick={()=>request(load)}>Làm mới</button></div>
         <div className="filters"><label><Search size={16}/><input placeholder="Tìm kiếm vật phẩm..." value={search} onChange={e=>setSearch(e.target.value)}/></label><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Tất cả loại tin</option><option value="LOST">Đồ bị mất</option><option value="FOUND">Đồ nhặt được</option></select></div>
         <div className="cardgrid">{visible.map(r=><ReportCard key={r.id} report={r} onClick={()=>setSelected(r)}/>)}</div>
         {!visible.length&&<p className="emptystate">Chưa có bài đăng phù hợp. Hãy thử tạo bài mới.</p>}
-      </section>
+      </section></>}
     </main>
     {showAuth&&<AuthModal onClose={()=>setShowAuth(false)} onSuccess={u=>{setMe(u);setShowAuth(false);notify('Đăng nhập thành công')}} notify={notify} request={request}/>}
     {showPost&&<PostModal type={showPost} catalog={catalog} onClose={()=>setShowPost(null)} notify={notify} request={request} onCreated={async()=>{setShowPost(null);await load()}}/>}
     {selected&&<DetailModal report={selected} me={me} onClose={()=>setSelected(null)} onAuth={()=>{setSelected(null);setShowAuth(true)}}
+      onChat={()=>{setChatReport(selected);setSelected(null)}}
       onMarkReturned={()=>request(async()=>{
         if(!window.confirm('Xác nhận bạn đã nhận/trả lại vật phẩm?'))return;
         const result=await api(`/items/${selected.id}/status`,{method:'PATCH'});
         setSelected(prev=>prev?{...prev,status:result.status}:null);
         await load();notify('Bài đăng đã được đánh dấu Đã trả');
       })}/> }
+    {chatReport&&<Modal wide onClose={()=>setChatReport(null)}><Sprint2ContactsView initialReport={chatReport} onClose={()=>setChatReport(null)}/></Modal>}
     {notice&&<div className={'toast '+(notice.error?'error':'')}>{notice.message}<button onClick={()=>setNotice(null)}><X size={16}/></button></div>}
     {busy&&<span className="working">Đang xử lý...</span>}
   </div>
@@ -112,7 +116,7 @@ function PostModal({type,catalog,onClose,notify,request,onCreated}){
  </form></Modal>
 }
 
-function DetailModal({report:r,me,onClose,onAuth,onMarkReturned}){
+function DetailModal({report:r,me,onClose,onAuth,onMarkReturned,onChat}){
   return <Modal wide onClose={onClose}>
     <div className="detailgrid"><div className="detailvisual">{r.images?.length?<img src={r.images[0]} alt={r.itemName}/>:<div className="detailplaceholder">{isFound(r.type)?'📦':'🎒'}</div>}</div>
       <div className="detailbody"><span className={'status '+r.status.toLowerCase()}>{r.status==='RETURNED'?'ĐÃ TRẢ':r.status}</span><h2>{r.itemName}</h2>
@@ -120,7 +124,8 @@ function DetailModal({report:r,me,onClose,onAuth,onMarkReturned}){
       <p><CalendarDays size={16}/> {time(r.eventTime)}</p>
       <p><strong>Danh mục:</strong> {r.category||'Khác'}</p><p>{r.description||'Chưa có mô tả bổ sung.'}</p>
       {me?.id===r.userId&&r.status==='OPEN'&&<button className="btn primary" onClick={onMarkReturned}><PackageCheck size={17}/> Đánh dấu đã trả đồ</button>}
-      {!me&&<button className="btn outline" onClick={onAuth}>Đăng nhập</button>}
+      {me&&me.id!==r.userId&&r.status==='OPEN'&&<button className="btn primary" onClick={onChat}><MessageCircle size={17}/> Liên hệ người đăng</button>}
+      {!me&&<button className="btn outline" onClick={onAuth}>Đăng nhập để liên hệ</button>}
     </div></div>
   </Modal>
 }
