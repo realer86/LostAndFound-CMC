@@ -67,6 +67,11 @@ await using (var scope = app.Services.CreateAsyncScope())
         try { await db.Database.EnsureCreatedAsync(); break; }
         catch when (i < attempts - 1) { await Task.Delay(2000); }
     }
+    // EF EnsureCreated không thêm bảng mới vào DB có sẵn. Chạy script idempotent #13
+    // cho cả CSDL Sprint 1 cũ và CSDL tạo mới mà không xóa dữ liệu.
+    var schemaPath = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "04_sprint2_contacts.sql");
+    await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(schemaPath));
+
     // Sửa vấn đề seed liên kết trong Final: mỗi danh mục/khu vực được kiểm tra độc lập.
     if (!await db.Categories.AnyAsync())
     {
@@ -79,6 +84,15 @@ await using (var scope = app.Services.CreateAsyncScope())
             .Select(name => new CampusLocation { Name = name }));
     }
     await db.SaveChangesAsync();
+
+    // Thông tin phòng ban bên dưới chỉ là ví dụ để demo; không khẳng định số máy thực của trường.
+    if (app.Environment.IsDevelopment() && !await db.Directories.AnyAsync())
+    {
+        db.Directories.AddRange(
+            new CampusDirectoryEntry { Name = "Phòng Bảo vệ (demo)", Location = "Sảnh tòa nhà A (demo)", InternalPhone = "1001", OfficeHours = "Theo ca trực", Category = "Bảo vệ" },
+            new CampusDirectoryEntry { Name = "Ban Quản lý (demo)", Location = "Tầng 1 (demo)", InternalPhone = "1002", OfficeHours = "Giờ hành chính", Category = "Quản lý" });
+        await db.SaveChangesAsync();
+    }
 
     if (app.Environment.IsDevelopment())
     {
