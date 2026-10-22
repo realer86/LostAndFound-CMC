@@ -1,4 +1,4 @@
-import ChatLogic from './components/ChatLogic';
+import { useChatLogic } from './components/ChatLogic.jsx';
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Search, Plus, MapPin, ArrowUpRight, ArrowRight, PackageOpen, PackageCheck, ShieldCheck,
@@ -49,7 +49,7 @@ function App(){
       <nav className="nav"><button className={tab==='discover'?'active':''} onClick={()=>setTab('discover')}>Trang chủ</button><button className={tab==='mine'?'active':''} onClick={()=>me?setTab('mine'):setShowAuth(true)}>Bài đăng của tôi</button><button className={tab==='contacts'?'active':''} onClick={()=>setTab('contacts')}>Liên hệ & Danh bạ</button></nav>
       <div className="topactions">{me?<><span>{me.fullName}</span><button className="btn outline" disabled={busy} onClick={logout}><LogOut size={16}/> Đăng xuất</button></>:<button className="btn outline" onClick={()=>setShowAuth(true)}>Đăng nhập / Đăng ký</button>}</div>
     </div></header>
-    <main className="container">{tab==='contacts' ? <Sprint2ContactsView /> : <><section className="hero"><span className="kicker">FOUNDLY · LOST & FOUND</span><h1>Đăng tin và tìm đồ thất lạc</h1><p>Demo Sprint 1: cơ sở dữ liệu, API đăng tin và Form với danh mục / khu vực.</p><div className="hero-actions"><button className="btn primary" onClick={()=>post('LOST')}><Plus size={17}/> Tôi bị mất đồ</button><button className="btn outline" onClick={()=>post('FOUND')}><PackageCheck size={17}/> Tôi nhặt được đồ</button></div></section>
+    <main className="container">{tab==='contacts' ? <ContactsScreen user={me}/> : <><section className="hero"><span className="kicker">FOUNDLY · LOST & FOUND</span><h1>Đăng tin và tìm đồ thất lạc</h1><p>Demo Sprint 1: cơ sở dữ liệu, API đăng tin và Form với danh mục / khu vực.</p><div className="hero-actions"><button className="btn primary" onClick={()=>post('LOST')}><Plus size={17}/> Tôi bị mất đồ</button><button className="btn outline" onClick={()=>post('FOUND')}><PackageCheck size={17}/> Tôi nhặt được đồ</button></div></section>
       <section className="feed"><div className="sectionheading"><div><span className="kicker">{tab==='mine'?'CỦA BẠN':'BÀI ĐĂNG MỚI'}</span><h2>{tab==='mine'?'Bài đăng của tôi':'Khám phá bài đăng'}</h2></div><button className="btn outline" onClick={()=>request(load)}>Làm mới</button></div>
         <div className="filters"><label><Search size={16}/><input placeholder="Tìm kiếm vật phẩm..." value={search} onChange={e=>setSearch(e.target.value)}/></label><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Tất cả loại tin</option><option value="LOST">Đồ bị mất</option><option value="FOUND">Đồ nhặt được</option></select></div>
         <div className="cardgrid">{visible.map(r=><ReportCard key={r.id} report={r} onClick={()=>setSelected(r)}/>)}</div>
@@ -66,7 +66,7 @@ function App(){
         setSelected(prev=>prev?{...prev,status:result.status}:null);
         await load();notify('Bài đăng đã được đánh dấu Đã trả');
       })}/> }
-    {chatReport&&<Modal wide onClose={()=>setChatReport(null)}><Sprint2ContactsView initialReport={chatReport} onClose={()=>setChatReport(null)}/></Modal>}
+    {chatReport&&<Modal wide onClose={()=>setChatReport(null)}><ContactsScreen user={me} initialReport={chatReport} onClose={()=>setChatReport(null)}/></Modal>}
     {notice&&<div className={'toast '+(notice.error?'error':'')}>{notice.message}<button onClick={()=>setNotice(null)}><X size={16}/></button></div>}
     {busy&&<span className="working">Đang xử lý...</span>}
   </div>
@@ -130,4 +130,10 @@ function DetailModal({report:r,me,onClose,onAuth,onMarkReturned,onChat}){
     </div></div>
   </Modal>
 }
-createRoot(document.getElementById('root')).render(<><App/><ChatLogic/></>);
+// Issue #15 provides data; Issue #14 continues to own the presentational component.
+function ContactsScreen({ user, initialReport = null, onClose = null }) {
+  const chat = useChatLogic({ user, initialReport });
+  return <Sprint2ContactsView initialReport={initialReport} onClose={onClose} live={chat}/>;
+}
+
+createRoot(document.getElementById('root')).render(<App/>);

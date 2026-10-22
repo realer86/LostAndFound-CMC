@@ -1,122 +1,151 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-const ChatLogic = () => {
+// Issue #15: API adapter for Issue #13. UI belongs to Issue #14.
+// All requests share the Vite proxy + session cookie used by Sprint 1.
+export async function chatApi(path, options = {}) {
+  const response = await fetch(`/api${path}`, {
+    credentials: 'same-origin',
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...options.headers },
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const fallback = response.status === 401
+      ? 'Vui lòng đăng nhập để sử dụng hộp thư.'
+      : `Không thể kết nối (HTTP ${response.status}).`;
+    throw new Error(body.message || fallback);
+  }
+  return body;
+}
+
+const sortContacts = contacts => [...contacts].sort((a, b) =>
+  new Date(b.lastMessageAt || b.createdAt) - new Date(a.lastMessageAt || a.createdAt));
+
+export function useChatLogic({ user, initialReport = null }) {
+  const userId = user?.id || null;
+  const reportId = initialReport?.id || null;
+  const openedReport = useRef(null);
   const [contacts, setContacts] = useState([]);
-  const [chatHistory, setChatHistory] = useState([]);
-  const [message, setMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [directory, setDirectory] = useState([]);
+  const [activeId, setActiveId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [messageTotal, setMessageTotal] = useState(0);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [loadingDirectory, setLoadingDirectory] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [contactError, setContactError] = useState('');
+  const [messageError, setMessageError] = useState('');
+  const [directoryError, setDirectoryError] = useState('');
+  const [contactsRefresh, setContactsRefresh] = useState(0);
+  const [messagesRefresh, setMessagesRefresh] = useState(0);
 
-  // 1. Fetch dữ liệu Danh bạ và Lịch sử chat khi vừa vào trang
+  const refreshContacts = useCallback(() => setContactsRefresh(n => n + 1), []);
+  const refreshMessages = useCallback(() => setMessagesRefresh(n => n + 1), []);
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Lưu ý: Đổi URL_BACKEND thành endpoint thực tế của Backend
-        // Lấy danh bạ
-        const resContacts = await fetch('http://localhost:5000/api/contacts');
-        if (resContacts.ok) {
-          const dataContacts = await resContacts.json();
-          setContacts(dataContacts);
-        }
-
-        // Lấy lịch sử chat
-        const resChats = await fetch('http://localhost:5000/api/chats');
-        if (resChats.ok) {
-          const dataChats = await resChats.json();
-          setChatHistory(dataChats);
-        }
-      } catch (error) {
-        console.error("Lỗi kết nối Backend:", error);
-      }
-    };
-
-    fetchData();
+    let cancelled = false;
+    setLoadingDirectory(true);
+    setDirectoryError('');
+    chatApi('/directory').then(data => {
+      if (!cancelled) setDirectory(Array.isArray(data.items) ? data.items : []);
+    }).catch(error => { if (!cancelled) setDirectoryError(error.message); })
+      .finally(() => { if (!cancelled) setLoadingDirectory(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  // 2. Bắt sự kiện nút "Gửi tin nhắn" và gọi API POST
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!message.trim()) return; // Không cho gửi tin nhắn trống
-
-    setIsLoading(true);
-    
-    // Gói dữ liệu tin nhắn gửi xuống DB
-    const newMessagePayload = {
-      content: message,
-      timestamp: new Date().toISOString()
-    };
-
-    try {
-      const response = await fetch('http://localhost:5000/api/chats', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newMessagePayload)
-      });
-
-      if (response.ok) {
-        // Cập nhật UI mượt mà: Thêm luôn tin nhắn vào danh sách hiện tại mà không cần fetch lại toàn bộ
-        setChatHistory(prevHistory => [...prevHistory, { ...newMessagePayload, id: Date.now(), isMine: true }]);
-        setMessage(''); // Xóa ô nhập text
-      } else {
-        alert("Gửi tin nhắn thất bại!");
-      }
-    } catch (error) {
-      console.error("Lỗi khi gửi tin:", error);
-    } finally {
-      setIsLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!userId) {
+      openedReport.current = null;
+      setContacts([]);
+      setActiveId(null);
+      setMessages([]);
+      setLoadingContacts(false);
+      setContactError('');
+      return () => { cancelled = true; };
     }
+    setLoadingContacts(true);
+    setContactError('');
+    (async () => {
+      try {
+        const response = await chatApi('/contacts');
+        let items = Array.isArray(response.items) ? response.items : [];
+        let initialContactId = null;
+        if (reportId && openedReport.current !== `${userId}:${reportId}`) {
+          // Open only once per viewing session; a refresh must not reopen a closed report.
+          // The server resolves the owner from reportId. Never send recipientId.
+          try {
+            const contact = await chatApi('/contacts', {
+              method: 'POST', body: JSON.stringify({ reportId }),
+            });
+            if (cancelled) return;
+            openedReport.current = `${userId}:${reportId}`;
+            initialContactId = contact.id;
+            items = [contact, ...items.filter(item => item.id !== contact.id)];
+          } catch (error) {
+            if (!cancelled) setContactError(error.message);
+          }
+        }
+        if (cancelled) return;
+        const ordered = sortContacts(items);
+        setContacts(ordered);
+        setActiveId(previous => initialContactId ||
+          (ordered.some(item => item.id === previous) ? previous : ordered[0]?.id || null));
+      } catch (error) {
+        if (!cancelled) setContactError(error.message);
+      } finally {
+        if (!cancelled) setLoadingContacts(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [userId, reportId, contactsRefresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setMessages([]);
+    setMessageTotal(0);
+    setMessageError('');
+    if (!userId || !activeId) {
+      setLoadingMessages(false);
+      return () => { cancelled = true; };
+    }
+    setLoadingMessages(true);
+    chatApi(`/messages?contactId=${encodeURIComponent(activeId)}&page=1&pageSize=50`)
+      .then(data => {
+        if (cancelled) return;
+        setMessages(Array.isArray(data.items) ? data.items : []);
+        setMessageTotal(Number(data.total) || 0);
+      }).catch(error => { if (!cancelled) setMessageError(error.message); })
+      .finally(() => { if (!cancelled) setLoadingMessages(false); });
+    return () => { cancelled = true; };
+  }, [userId, activeId, messagesRefresh]);
+
+  async function sendMessage(content) {
+    const text = content.trim();
+    if (!userId || !activeId || sending || text.length < 1 || text.length > 1500) return false;
+    setSending(true);
+    setMessageError('');
+    try {
+      await chatApi('/messages', {
+        method: 'POST', body: JSON.stringify({ contactId: activeId, content: text }),
+      });
+      // Refetch the authoritative response; no fake local messages or Date.now() IDs.
+      refreshMessages();
+      refreshContacts();
+      return true;
+    } catch (error) {
+      setMessageError(error.message);
+      return false;
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return {
+    user, contacts, directory, activeId, setActiveId, messages, messageTotal,
+    loadingContacts, loadingMessages, loadingDirectory, sending,
+    contactError, messageError, directoryError,
+    refreshContacts, refreshMessages, sendMessage,
   };
-
-  return (
-    <div style={{ display: 'flex', gap: '20px', maxWidth: '800px', margin: '20px auto', fontFamily: 'sans-serif' }}>
-      
-      {/* Cột Danh bạ */}
-      <div style={{ flex: 1, border: '1px solid #ccc', borderRadius: '8px', padding: '10px' }}>
-        <h3>Danh bạ</h3>
-        <ul style={{ listStyle: 'none', padding: 0 }}>
-          {contacts.length > 0 ? contacts.map((contact) => (
-            <li key={contact.id} style={{ padding: '8px', borderBottom: '1px solid #eee' }}>
-              {contact.name}
-            </li>
-          )) : <p style={{ fontSize: '14px', color: '#666' }}>Đang tải danh bạ...</p>}
-        </ul>
-      </div>
-
-      {/* Cột Lịch sử Chat & Form Gửi */}
-      <div style={{ flex: 2, border: '1px solid #ccc', borderRadius: '8px', padding: '10px', display: 'flex', flexDirection: 'column' }}>
-        <h3>Khung Chat</h3>
-        
-        {/* Lịch sử chat */}
-        <div style={{ flex: 1, minHeight: '300px', maxHeight: '300px', overflowY: 'auto', border: '1px solid #eee', marginBottom: '10px', padding: '10px' }}>
-          {chatHistory.length > 0 ? chatHistory.map((chat) => (
-            <div key={chat.id} style={{ textAlign: chat.isMine ? 'right' : 'left', marginBottom: '10px' }}>
-              <span style={{ 
-                display: 'inline-block', padding: '8px 12px', borderRadius: '15px', 
-                backgroundColor: chat.isMine ? '#007bff' : '#e9ecef',
-                color: chat.isMine ? 'white' : 'black' 
-              }}>
-                {chat.content}
-              </span>
-            </div>
-          )) : <p style={{ textAlign: 'center', color: '#888' }}>Chưa có tin nhắn nào.</p>}
-        </div>
-
-        {/* Khung nhập tin nhắn */}
-        <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: '10px' }}>
-          <input 
-            type="text" 
-            value={message} 
-            onChange={(e) => setMessage(e.target.value)} 
-            placeholder="Nhập tin nhắn..." 
-            style={{ flex: 1, padding: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-          />
-          <button type="submit" disabled={isLoading} style={{ padding: '10px 20px', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-            {isLoading ? 'Đang gửi...' : 'Gửi'}
-          </button>
-        </form>
-      </div>
-
-    </div>
-  );
-};
-
-export default ChatLogic;
+}
