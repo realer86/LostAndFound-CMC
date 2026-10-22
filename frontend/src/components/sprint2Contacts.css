@@ -39,3 +39,10 @@
 /* Main Sprint 1 navigation now has a third tab; ensure it wraps safely on narrow devices. */
 @media(max-width:580px){.nav button{min-width:0;padding:8px 6px;font-size:11px;white-space:normal;line-height:1.3}.topinner{gap:8px}}
 @media(max-width:380px){.brand small{display:none}.topactions .btn{font-size:11px;padding:9px 8px}}
+
+/* Issue #15: small controls that reuse Issue #14's responsive layout. */
+.s2-list-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.s2-refresh{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;border-radius:8px;padding:7px;color:#087c86;font-size:11px;font-weight:700}
+.s2-refresh:hover{background:#e6f7f6}
+.s2-history-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 15px;color:#738d95;font-size:11px;flex-wrap:wrap}
+.s2-error{font-size:12px;line-height:1.5;color:#a33535;background:#fff0ee;border-radius:9px;padding:10px;overflow-wrap:anywhere}
