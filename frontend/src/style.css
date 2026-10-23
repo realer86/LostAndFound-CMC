@@ -113,8 +113,12 @@
 /* Guest actions: post first, then direct registration and sign-in.
    Keep the narrow-screen menu usable without crowding the brand/header. */
 .mobile-nav-actions { display: none; }
-@media (max-width: 600px) {
-  .topactions .topregister { display: none; }
+@media (max-width: 850px) {
+  /* Navigation is collapsed at <=850px; move all guest actions into its menu.
+     At 601–850px the old desktop actions overflowed the header. */
+  .topactions .topregister,
+  .topactions .topnew,
+  .topactions .signin { display: none; }
   .mobile-nav-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

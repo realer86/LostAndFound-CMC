@@ -4,7 +4,7 @@ Tests all existing user journeys without writing to a real database.
 Example: FOUNDLY_FRONTEND_URL=http://127.0.0.1:5175 CHROMIUM_PATH=/usr/bin/chromium python tests/frontend_full_e2e.py
 """
 from pathlib import Path
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 from urllib.parse import urlparse, parse_qs
 import json, re, copy
 ROOT=Path(__file__).resolve().parents[1]
@@ -99,16 +99,22 @@ def run():
   def home():
    c,p,a,e=setup(browser)
    try:
-    assert p.locator('.reportcard').count()==3
+    # Playwright waits until the *rendered* async response satisfies the assertion.
+    # Immediate count() and 100ms sleeps are timing-sensitive in GitHub Actions.
+    expect(p.locator('.reportcard')).to_have_count(3)
     p.locator('.filterpill').filter(has_text='Đồ nhặt được').click()
-    assert p.locator('.reportcard').count()==1
+    expect(p.locator('.reportcard')).to_have_count(1)
+    expect(p.locator('.reportcard')).to_contain_text('Balo xanh')
     p.locator('.filterpill').filter(has_text='Tất cả').click()
-    p.locator('.searchbox input').fill('điện thoại');p.wait_for_timeout(100)
-    assert p.locator('.reportcard').count()==1
-    p.locator('.searchbox input').fill('');p.wait_for_timeout(100)
-    assert 'ĐÃ TRẢ' in p.locator('.reportcard').filter(has_text='Điện thoại đỏ').inner_text(),'returned status badge missing'
+    expect(p.locator('.reportcard')).to_have_count(3)
+    p.locator('.searchbox input').fill('điện thoại')
+    expect(p.locator('.reportcard')).to_have_count(1)
+    expect(p.locator('.reportcard')).to_contain_text('Điện thoại đỏ')
+    p.locator('.searchbox input').fill('')
+    expect(p.locator('.reportcard')).to_have_count(3)
+    expect(p.locator('.reportcard').filter(has_text='Điện thoại đỏ')).to_contain_text('ĐÃ TRẢ')
     p.locator('.reportcard').filter(has_text='Điện thoại đỏ').click()
-    assert 'ĐÃ TRẢ' in p.locator('.detailbody').inner_text(),'returned detail status missing'
+    expect(p.locator('.detailbody')).to_contain_text('ĐÃ TRẢ')
     assert not e,e
    finally:c.close()
   case('feed, search, filters, RETURNED status',home)
@@ -264,7 +270,12 @@ def run():
       p.get_by_role('button',name='Mở menu').click()
       for j in range(7):
        if not links.nth(j).is_visible():failures.append(f'mobile nav link {j+1} hidden when opened at {width}')
-     if p.evaluate('document.documentElement.scrollWidth > window.innerWidth'):failures.append(f'horizontal overflow at {width}')
+     p.evaluate('document.fonts.ready')
+     actual_width=p.evaluate('document.documentElement.scrollWidth')
+     if actual_width > width:failures.append(f'horizontal overflow at {width}: scrollWidth={actual_width}')
+     if 601 <= width <= 850:
+      if p.locator('.topactions .topregister').is_visible():failures.append(f'guest buttons overflowing collapsed header at {width}')
+      if not p.locator('.mobile-nav-actions').is_visible():failures.append(f'guest buttons missing from expanded menu at {width}')
      if e:failures+=e
     finally:c.close()
    assert not failures,failures

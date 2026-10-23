@@ -40,9 +40,10 @@ function App(){
   const [chatReport,setChatReport]=useState(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null),[mobileNav,setMobileNav]=useState(false),[count,setCount]=useState(0);
   const sessionKeyRef=useRef(0); // Prevent old account responses from overwriting a switched account.
+  const reportsRequestRef=useRef(0); // Only the newest search/filter response may update the feed.
   const notify=(text,error=false)=>{setNotice({text,error});setTimeout(()=>setNotice(null),4800)};
   const request=async(fn)=>{setBusy(true);try{await fn();}catch(err){notify(err.message,true);}finally{setBusy(false);}};
-  const loadReports=async(index=1)=>{const result=await api(`/reports?type=${filter==='ALL'?'':filter}&q=${encodeURIComponent(search)}&page=${index}`);setReports(previous=>index===1?result.items:[...previous,...result.items]);setCount(result.total);setReportPage(index)};
+  const loadReports=async(index=1)=>{const requestId=++reportsRequestRef.current;const result=await api(`/reports?type=${filter==='ALL'?'':filter}&q=${encodeURIComponent(search)}&page=${index}`);if(requestId!==reportsRequestRef.current)return;setReports(previous=>index===1?result.items:[...previous,...result.items]);setCount(result.total);setReportPage(index)};
   const loadMine=async()=>{if(!me)return;const session=sessionKeyRef.current;const items=await api('/reports/mine');if(session===sessionKeyRef.current)setMine(items);};
   const loadNotifs=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const items=await api('/notifications');if(session===sessionKeyRef.current)setNotifications(items);};
   const loadClaims=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const [a,b]=await Promise.all([api('/claims/mine'),api('/claims/inbox')]);if(session===sessionKeyRef.current){setMyClaims(a);setInbox(b);}};
