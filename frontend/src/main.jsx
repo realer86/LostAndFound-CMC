@@ -4,13 +4,13 @@ import { Search, Plus, Bell, Menu, MapPin, CalendarDays, ArrowUpRight, ArrowRigh
 import './style.css';
 import { useChatLogic } from './components/ChatLogic.jsx';
 import Sprint2ContactsView from './components/Sprint2ContactsView.jsx';
+import MatchingPanel from './components/MatchingPanel.jsx';
 
 // `sprint` keeps the existing repository's API contract; `full` enables the original Foundly Pro flows.
 // Sprint/main backend supports /api/reports (aliases /api/items), Sprint 2 chat and directory.
 // Do not set VITE_API_PROFILE=full until Full Operations endpoints are implemented and tested.
 const fullBackend = import.meta.env.VITE_API_PROFILE === 'full';
 const upcomingFeatures = {
-  matching: { title: 'Gợi ý phù hợp', description: 'Thuật toán ghép tin mất/nhặt và API matching đang được phát triển.' },
   claims: { title: 'Yêu cầu nhận đồ', description: 'Xác minh bằng chứng và phê duyệt yêu cầu cần API claims.' },
   operations: { title: 'Hỗ trợ & ký gửi', description: 'Quy trình hỗ trợ và ký gửi sẽ được kết nối khi API operations hoàn thành.' },
   handovers: { title: 'Phòng bàn giao nâng cao', description: 'Đặt lịch và xác nhận bàn giao hai bên cần API handovers. Bạn có thể trao đổi qua Hộp thư hiện có.' },
@@ -34,13 +34,14 @@ function App(){
   const [me,setMe]=useState(null),[page,setPage]=useState('discover'),[filter,setFilter]=useState('ALL'),[search,setSearch]=useState('');
   const [reports,setReports]=useState([]),[mine,setMine]=useState([]),[catalog,setCatalog]=useState({categories:[],locations:[]});
   const [selected,setSelected]=useState(null),[showAuth,setShowAuth]=useState(false),[authInitialMode,setAuthInitialMode]=useState('login'),[showPost,setShowPost]=useState(false),[editingReport,setEditingReport]=useState(null),[reportPage,setReportPage]=useState(1);
-  const [notifications,setNotifications]=useState([]),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null);
+  const [notifications,setNotifications]=useState([]),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null),[matchingLoading,setMatchingLoading]=useState(false);
   const [myClaims,setMyClaims]=useState([]),[inbox,setInbox]=useState([]);
   const [selectedClaimRoom,setSelectedClaimRoom]=useState(null);
   const [chatReport,setChatReport]=useState(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null),[mobileNav,setMobileNav]=useState(false),[count,setCount]=useState(0);
   const sessionKeyRef=useRef(0); // Prevent old account responses from overwriting a switched account.
   const reportsRequestRef=useRef(0); // Only the newest search/filter response may update the feed.
+  const matchingRequestRef=useRef(0); // Ignore old matching results after switching reports/accounts.
   const notify=(text,error=false)=>{setNotice({text,error});setTimeout(()=>setNotice(null),4800)};
   const request=async(fn)=>{setBusy(true);try{await fn();}catch(err){notify(err.message,true);}finally{setBusy(false);}};
   const loadReports=async(index=1)=>{const requestId=++reportsRequestRef.current;const result=await api(`/reports?type=${filter==='ALL'?'':filter}&q=${encodeURIComponent(search)}&page=${index}`);if(requestId!==reportsRequestRef.current)return;setReports(previous=>index===1?result.items:[...previous,...result.items]);setCount(result.total);setReportPage(index)};
@@ -50,7 +51,7 @@ function App(){
   const refresh=async()=>{await Promise.all(fullBackend?[loadReports(),loadMine(),loadNotifs(),loadClaims()]:[loadReports(),loadMine()].filter(Boolean))};
   useEffect(()=>{api('/auth/me').then(data=>setMe(data.user)).catch(()=>{});api('/reports/catalog').then(setCatalog).catch(()=>{});},[]);
   useEffect(()=>{loadReports().catch(err=>notify(err.message,true))},[filter,search]);
-  useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);setNotifications([]);setMyClaims([]);setInbox([]);}},[me]);
+  useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);matchingRequestRef.current++;setSelectedMine(null);setNotifications([]);setMyClaims([]);setInbox([]);}},[me]);
   // Refresh the notification bell automatically, including when someone posts in another session.
   useEffect(()=>{
     if(!fullBackend||!me?.id)return;
@@ -59,8 +60,9 @@ function App(){
     const timer=setInterval(check,12000);
     return ()=>{active=false;clearInterval(timer);};
   },[me?.id]);
-  useEffect(()=>{if(page==='discover')loadReports().catch(()=>{});else if(page==='mine')loadMine().catch(()=>{});else if(fullBackend&&page==='claims')loadClaims().catch(()=>{});else if(fullBackend&&page==='notifications')loadNotifs().catch(()=>{});},[page]);
-  const authDone=(user)=>{sessionKeyRef.current++;setMe(user);setShowAuth(false);notify(`Chào mừng ${user.fullName}!`)};
+  useEffect(()=>{if(page==='discover')loadReports().catch(()=>{});else if(page==='mine')loadMine().catch(()=>{});else if(page==='matching'&&me)loadMine().catch(()=>{});else if(fullBackend&&page==='claims')loadClaims().catch(()=>{});else if(fullBackend&&page==='notifications')loadNotifs().catch(()=>{});},[page]);
+  useEffect(()=>{if(page==='matching'&&me&&mine.length&&!selectedMine){const first=mine.find(r=>r.status==='OPEN');if(first)getMatches(first.id);}},[page,me,mine,selectedMine]);
+  const authDone=(user)=>{sessionKeyRef.current++;matchingRequestRef.current++;setSelectedMine(null);setMatches([]);setMe(user);setShowAuth(false);notify(`Chào mừng ${user.fullName}!`)};
   const openAuth=(mode='login')=>{setAuthInitialMode(mode);setMobileNav(false);setShowAuth(true)};
   const openPost=(type='LOST')=>{if(!me){openAuth();return;}setEditingReport(null);setShowPost(type)};
   const editPost=r=>{setEditingReport(r);setShowPost(r.type)};
@@ -71,23 +73,27 @@ function App(){
     if(!me) { openAuth(); return; }
     goto(name);
   };
-  // The public discovery feed can display both LOST and FOUND; personal matches must be opposite type.
-  const openMatches=async(id, reportType)=>{
-    if(!fullBackend){notify('Matching đang chờ API từ backend Full Operations.');return;}
+  // Matching is available on main, without Google OAuth or REQ-04.
+  const openMatches=async(id)=>{
+    const requestId=++matchingRequestRef.current;
     setSelectedMine(id);
     setMatches([]);
-    const results=await api(`/reports/${id}/matches`);
-    const sourceType=reportType||mine.find(r=>r.id===id)?.type;
-    const oppositeType=sourceType==='LOST'?'FOUND':sourceType==='FOUND'?'LOST':null;
-    setMatches(oppositeType?results.filter(m=>m.report?.type===oppositeType):results);
+    setMatchingLoading(true);
     goto('matching');
+    try {
+      const results=await api(`/reports/${id}/matches?minScore=50&limit=10`);
+      if(requestId===matchingRequestRef.current)setMatches(results.matches || []);
+    } catch(err) {
+      if(requestId===matchingRequestRef.current)notify(err.message,true);
+    } finally {
+      if(requestId===matchingRequestRef.current)setMatchingLoading(false);
+    }
   };
-  const getMatches=(id)=>request(()=>openMatches(id));
-  const activeReport=mine.find(r=>r.id===selectedMine);
+  const getMatches=(id)=>openMatches(id);
 
   const logout=()=>request(async()=>{
     await api('/auth/logout',{method:'POST'});
-    sessionKeyRef.current++;
+    sessionKeyRef.current++;matchingRequestRef.current++;
     // Clear every personal view to prevent the previous user's data lingering after account switching.
     setMe(null);setNotifications([]);setMine([]);setMatches([]);setSelectedMine(null);
     setMyClaims([]);setInbox([]);
@@ -100,7 +106,7 @@ function App(){
       <nav className={'nav '+(mobileNav?'navopen':'')}>
         <button className={page==='discover'?'active':''} onClick={()=>goto('discover')}>Khám phá</button>
         <button className={page==='mine'?'active':''} onClick={()=>me?goto('mine'):openAuth()}>Bài của tôi</button>
-        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
+        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp</button>
         <button className={page==='claims'||page==='upcoming-claims'?'active':''} onClick={()=>gotoFeature('claims')}>Yêu cầu nhận đồ{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='operations'||page==='upcoming-operations'?'active':''} onClick={()=>gotoFeature('operations')}>Hỗ trợ & ký gửi{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
@@ -131,16 +137,16 @@ function App(){
       <section className="hero"><div className="container herogrid"><div className="hero-copy">
         <div className="eyebrow"><span className="sparkle"><Sparkles size={13}/></span> Kết nối lại những gì bị thất lạc</div>
         <h1>Thất lạc đồ?<br/><em>Đừng lo, có Foundly.</em></h1>
-        <p>{fullBackend?'Nơi sinh viên đăng tin mất đồ, chia sẻ những vật đã nhặt được và tìm lại đồ qua gợi ý tương đồng thông minh.':'Nơi sinh viên đăng tin, tìm đồ và trao đổi riêng qua Hộp thư. Các chức năng nâng cao sẽ mở khi API được hoàn thiện.'}</p>
+        <p>{fullBackend?'Nơi sinh viên đăng tin mất đồ, chia sẻ những vật đã nhặt được và tìm lại đồ qua gợi ý tương đồng thông minh.':'Đăng tin, tìm đồ và nhận gợi ý phù hợp; trao đổi an toàn qua Hộp thư. Xác minh và bàn giao nâng cao đang phát triển.'}</p>
         <div className="hero-actions"><button className="btn primary lg" onClick={()=>openPost('LOST')}><PackageOpen size={19}/> Tôi bị mất đồ</button><button className="btn ghost lg" onClick={()=>openPost('FOUND')}><PackageCheck size={19}/> Tôi nhặt được đồ</button></div>
         <div className="hero-proof"><div className="proof-icons"><span>🎒</span><span>🔑</span><span>📱</span></div><div><strong>Kết nối cộng đồng trong trường</strong><small>Đăng tin nhanh • Bảo vệ thông tin riêng tư</small></div></div>
-      </div><div className="hero-illustration"><div className="hero-glow"/><div className="floating floatone"><div className="floatingicon mint"><PackageCheck size={25}/></div><div><strong>Đã nhặt được!</strong><small>Chùm chìa khóa • Giảng đường A</small></div><CheckCircle2 className="floatingcheck" size={19}/></div><div className="centerobj"><div className="centerRing ringone"/><div className="centerRing ringtwo"/><div className="bag">🎒</div><div className="orbit orbitA">🔑</div><div className="orbit orbitB">📱</div><div className="orbit orbitC">💳</div></div><div className="floating floattwo"><div className="floatingicon peach"><Sparkles size={24}/></div><div><strong>Gợi ý tương đồng</strong><small>{fullBackend?'Hệ thống tìm đồ có đặc điểm giống nhau':'Sẽ mở khi backend hỗ trợ'}</small></div><span className="matchtick">{fullBackend?'98%':'Sắp có'}</span></div></div></div></section>
+      </div><div className="hero-illustration"><div className="hero-glow"/><div className="floating floatone"><div className="floatingicon mint"><PackageCheck size={25}/></div><div><strong>Đã nhặt được!</strong><small>Chùm chìa khóa • Giảng đường A</small></div><CheckCircle2 className="floatingcheck" size={19}/></div><div className="centerobj"><div className="centerRing ringone"/><div className="centerRing ringtwo"/><div className="bag">🎒</div><div className="orbit orbitA">🔑</div><div className="orbit orbitB">📱</div><div className="orbit orbitC">💳</div></div><div className="floating floattwo"><div className="floatingicon peach"><Sparkles size={24}/></div><div><strong>Gợi ý tương đồng</strong><small>{fullBackend?'Hệ thống tìm đồ có đặc điểm giống nhau':'Ghép các bài báo mất và nhặt được'}</small></div><span className="matchtick">50+ điểm</span></div></div></div></section>
       <section className="searchsection container"><div className="searchpanel"><div className="searchbox"><Search size={20}/><input placeholder="Tìm điện thoại, ví, thẻ sinh viên, chìa khóa..." value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button className="tinyx" onClick={()=>setSearch('')}><X size={16}/></button>}</div><button className="btn primary searchbtn" onClick={()=>loadReports()}><Search size={18}/> Tìm kiếm</button></div></section>
       <section className="container feed"><div className="sectionheading"><div><span className="kicker">CẬP NHẬT MỚI NHẤT</span><h2>Đồ thất lạc quanh bạn</h2><p>Khám phá những món đồ vừa được đăng trong cộng đồng.</p></div><div className="counttag">{count} bài đăng</div></div>
       <div className="filters">{categories.map(([id,label])=><button key={id} className={'filterpill '+(filter===id?'on':'')} onClick={()=>setFilter(id)}>{id==='ALL'?<SlidersHorizontal size={15}/>:id==='LOST'?<PackageOpen size={15}/>:<PackageCheck size={15}/>} {label}</button>)}<button className="refresh" onClick={()=>refresh().catch(err=>notify(err.message,true))}><RefreshCcw size={15}/> Làm mới</button></div>
       <div className="cardgrid">{reports.map(r=><ReportCard key={r.id} report={r} onClick={()=>setSelected(r)} />)}</div>
       {reports.length===0&&<Empty icon={<Search/>} title="Chưa tìm thấy bài đăng phù hợp" detail="Thử một từ khóa khác hoặc đổi bộ lọc."/>}{reports.length<count&&<div className="loadmore"><button className="btn outline" onClick={()=>loadReports(reportPage+1).catch(e=>notify(e.message,true))}>Xem thêm bài đăng <ArrowRight size={16}/></button></div>}
-      </section><section className="how"><div className="container"><span className="kicker">CÁCH FOUNDLY HOẠT ĐỘNG</span><h2>Ba bước để tìm lại đồ</h2><div className="steps"><div><span>01</span><PackageOpen size={26}/><h3>Đăng thông tin</h3><p>Chọn mất đồ hoặc nhặt được, mô tả đặc điểm và khu vực.</p></div><div><span>02</span><Sparkles size={26}/><h3>Nhận gợi ý</h3><p>{fullBackend?'Hệ thống so sánh nhiều đặc điểm, cả khi thứ tự đăng bài khác nhau.':'Tính năng sắp có khi kết nối backend đầy đủ.'}</p></div><div><span>03</span><ShieldCheck size={26}/><h3>Xác minh & nhận lại</h3><p>{fullBackend?'Cung cấp bằng chứng riêng tư trước khi hai bên xác nhận bàn giao.':'Chỉ khả dụng khi tích hợp claim và bàn giao.'}</p></div></div></div></section>
+      </section><section className="how"><div className="container"><span className="kicker">CÁCH FOUNDLY HOẠT ĐỘNG</span><h2>Ba bước để tìm lại đồ</h2><div className="steps"><div><span>01</span><PackageOpen size={26}/><h3>Đăng thông tin</h3><p>Chọn mất đồ hoặc nhặt được, mô tả đặc điểm và khu vực.</p></div><div><span>02</span><Sparkles size={26}/><h3>Nhận gợi ý</h3><p>{fullBackend?'Hệ thống so sánh nhiều đặc điểm, cả khi thứ tự đăng bài khác nhau.':'So khớp nhiều đặc điểm, kể cả khi tên gọi hoặc mô tả khác nhau.'}</p></div><div><span>03</span><ShieldCheck size={26}/><h3>Xác minh & nhận lại</h3><p>{fullBackend?'Cung cấp bằng chứng riêng tư trước khi hai bên xác nhận bàn giao.':'Chỉ khả dụng khi tích hợp claim và bàn giao.'}</p></div></div></div></section>
     </>}
     {page==='contacts'&&<section className="container privatepage contacts-integrated"><ContactsScreen user={me}/></section>}
     {!fullBackend && page.startsWith('upcoming-') && (()=>{
@@ -153,8 +159,8 @@ function App(){
         </div>
       </section>;
     })()}
-    {page==='mine'&&<section className="container privatepage"><PageHeader kicker="KHÔNG GIAN CỦA BẠN" title="Bài đăng của tôi" subtitle={fullBackend?'Theo dõi các bài đã đăng và xem gợi ý phù hợp.':'Theo dõi bài đã đăng, đánh dấu hoàn trả và liên hệ qua Hộp thư.'} action={<button className="btn primary" onClick={()=>openPost('LOST')}><Plus size={16}/> Đăng bài mới</button>}/><div className="cardgrid">{mine.map(r=><div key={r.id} className="mycard"><ReportCard report={r} onClick={()=>setSelected(r)}/><div className="cardactions"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><button type="button" onClick={()=>fullBackend?getMatches(r.id):gotoFeature('matching')}><Sparkles size={15}/> Gợi ý{!fullBackend?' · Sắp có':''}</button>{fullBackend&&r.status==='EXPIRED'&&<button onClick={()=>request(async()=>{await api(`/operations/reports/${r.id}/renew`,{method:'PATCH'});notify('Đã gia hạn bài thêm 30 ngày.');await refresh()})}>Gia hạn</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>editPost(r)}><Eye size={14}/> Sửa</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>request(async()=>{await api(`/reports/${r.id}/close`,{method:'PATCH'});notify('Đã đóng bài');await refresh()})}><X size={14}/> Đóng bài</button>}{!fullBackend&&r.status==='OPEN'&&<button type="button" onClick={()=>request(async()=>{if(!window.confirm('Xác nhận vật phẩm đã được hoàn trả?'))return;await api(`/reports/${r.id}/status`,{method:'PATCH'});await refresh();notify('Đã đánh dấu hoàn trả')})}><CheckCheck size={15}/> Đã hoàn trả</button>}</div></div>)}</div>{mine.length===0&&<Empty icon={<PackageOpen/>} title="Chưa có bài đăng nào" detail="Đăng thông tin về đồ bạn mất hoặc nhặt được."/>}</section>}
-    {page==='matching'&&<section className="container privatepage"><PageHeader kicker="MATCHING ENGINE" title="Gợi ý phù hợp" subtitle="Báo MẤT chỉ đối chiếu với bài NHẶT ĐƯỢC và ngược lại. Điểm số không phải bằng chứng sở hữu."/><div className="matchinglayout"><aside className="reportselector"><h3>Chọn bài đăng</h3>{mine.map(r=><button key={r.id} className={selectedMine===r.id?'chosen':''} onClick={()=>getMatches(r.id)}><span className={'tinybadge '+(isFound(r.type)?'found':'lost')}>{r.type}</span><span>{r.itemName}</span><ArrowRight size={15}/></button>)}{mine.length===0&&<p>Đăng nhập và tạo bài để nhận gợi ý.</p>}</aside><div className="matchlist"><h3>{selectedMine?(activeReport?.type==='LOST'?'Các bài NHẶT ĐƯỢC có khả năng trùng khớp':activeReport?.type==='FOUND'?'Các bài BÁO MẤT có khả năng trùng khớp':'Các bài đối lập có khả năng trùng khớp'):'Chọn một bài bên trái để xem kết quả'}</h3>{matches.map(m=><div className="matchrow" key={m.id}><div className="matchscore"><strong>{Math.round(m.score)}</strong><small>điểm</small></div><div className="matchdetails"><span className="hint">{Math.round(m.coverage*100)}% độ phủ dữ liệu · {m.comparedFeatures} tiêu chí</span><h4>{m.report.itemName}</h4><span>{m.report.location||m.report.locationDetail||'Chưa rõ địa điểm'}</span></div><button className="btn outline" onClick={()=>setSelected(m.report)}>Xem bài <ArrowUpRight size={14}/></button><button className="iconbutton" title="Ẩn gợi ý" onClick={()=>request(async()=>{await api(`/reports/matches/${m.id}/dismiss`,{method:'PATCH'});await getMatches(selectedMine)})}><X size={17}/></button></div>)}{selectedMine&&matches.length===0&&<><Empty icon={<Sparkles/>} title="Chưa có gợi ý phù hợp" detail={activeReport?.type==='LOST'?'Chưa có bài NHẶT ĐƯỢC đủ tương đồng. Bài BÁO MẤT khác sẽ không được đề xuất.':'Chưa có bài BÁO MẤT đủ tương đồng. Bài NHẶT ĐƯỢC khác sẽ không được đề xuất.'}/><div className="loadmore"><button className="btn outline" onClick={()=>{setSearch('');setFilter(activeReport?.type==='LOST'?'FOUND':'LOST');goto('discover')}}>Xem tất cả bài {activeReport?.type==='LOST'?'nhặt được':'báo mất'} <ArrowRight size={16}/></button></div></>}</div></div></section>}
+    {page==='mine'&&<section className="container privatepage"><PageHeader kicker="KHÔNG GIAN CỦA BẠN" title="Bài đăng của tôi" subtitle="Theo dõi bài đăng, tìm gợi ý tương đồng và liên hệ qua Hộp thư." action={<button className="btn primary" onClick={()=>openPost('LOST')}><Plus size={16}/> Đăng bài mới</button>}/><div className="cardgrid">{mine.map(r=><div key={r.id} className="mycard"><ReportCard report={r} onClick={()=>setSelected(r)}/><div className="cardactions"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><button type="button" onClick={()=>getMatches(r.id)}><Sparkles size={15}/> Gợi ý</button>{fullBackend&&r.status==='EXPIRED'&&<button onClick={()=>request(async()=>{await api(`/operations/reports/${r.id}/renew`,{method:'PATCH'});notify('Đã gia hạn bài thêm 30 ngày.');await refresh()})}>Gia hạn</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>editPost(r)}><Eye size={14}/> Sửa</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>request(async()=>{await api(`/reports/${r.id}/close`,{method:'PATCH'});notify('Đã đóng bài');await refresh()})}><X size={14}/> Đóng bài</button>}{!fullBackend&&r.status==='OPEN'&&<button type="button" onClick={()=>request(async()=>{if(!window.confirm('Xác nhận vật phẩm đã được hoàn trả?'))return;await api(`/reports/${r.id}/status`,{method:'PATCH'});await refresh();notify('Đã đánh dấu hoàn trả')})}><CheckCheck size={15}/> Đã hoàn trả</button>}</div></div>)}</div>{mine.length===0&&<Empty icon={<PackageOpen/>} title="Chưa có bài đăng nào" detail="Đăng thông tin về đồ bạn mất hoặc nhặt được."/>}</section>}
+    {page==='matching'&&<MatchingPanel mine={mine} selectedId={selectedMine} matches={matches} loading={matchingLoading} onSelect={getMatches} onOpen={setSelected} onExplore={(type)=>{setSearch('');setFilter(type==='LOST'?'FOUND':'LOST');goto('discover');}}/>}
     {page==='claims'&&<section className="container privatepage"><PageHeader kicker="XÁC MINH AN TOÀN" title="Yêu cầu nhận đồ" subtitle="Bằng chứng chỉ hiển thị cho người liên quan và quản trị viên."/><div className="sectionheading minor"><h3>Yêu cầu bạn đã gửi</h3></div><div className="listpanel">{myClaims.map(c=><ClaimRow key={c.id} c={c} onRoom={()=>{setSelectedClaimRoom(c.id);goto('handovers')}} onAct={action=>request(async()=>{if(action==='withdraw'){await api(`/claims/${c.id}/withdraw`,{method:'POST'});notify('Đã rút yêu cầu.');await refresh()}})}/>)}{myClaims.length===0&&<p className="muted padded">Bạn chưa gửi yêu cầu nhận đồ nào.</p>}</div><div className="sectionheading minor"><h3>Yêu cầu cần bạn xét duyệt</h3></div><div className="listpanel">{inbox.map(c=><ClaimRow key={c.id} c={c} inbox onRoom={()=>{setSelectedClaimRoom(c.id);goto('handovers')}} onAct={(action)=>request(async()=>{if(action==='revoke'){const reason=window.prompt('Lý do hủy chấp thuận (tối thiểu 10 ký tự):');if(!reason)return;await api(`/claims/${c.id}/revoke`,{method:'POST',body:JSON.stringify({reason})})}else{await api(`/claims/${c.id}/review`,{method:'PATCH',body:JSON.stringify({approve:action==='approve'})})}notify('Đã cập nhật yêu cầu');await refresh()})}/>)}{inbox.length===0&&<p className="muted padded">Chưa có yêu cầu cần xét duyệt.</p>}</div></section>}
     {page==='operations'&&me&&<OperationsHub mine={mine} notify={notify} onRefresh={refresh}/>}
     {page==='handovers'&&me&&<HandoverHub user={me} selectedClaimId={selectedClaimRoom} notify={notify} onRefresh={async()=>{await Promise.all([loadNotifs(),loadClaims(),loadMine()])}}/>}
@@ -164,7 +170,7 @@ function App(){
     </main>
     <footer><div className="container footerinner"><div className="footerbrand"><span className="brandmark"><PackageOpen size={18}/></span><div><strong>foundly</strong><small>Dự án quản lý đồ thất lạc tại trường đại học</small></div></div><p>Made for campus communities · Phiên bản demo chạy localhost · {fullBackend?<span>Quản trị sử dụng giao diện riêng</span>:<span>Quản trị nâng cao đang phát triển</span>}</p><p>Bảo vệ quyền riêng tư • Xác minh trước khi bàn giao</p></div></footer>
     {showAuth&&<AuthModal initialMode={authInitialMode} onClose={()=>setShowAuth(false)} onSuccess={authDone} notify={notify} request={request}/>}
-    {showPost&&<PostModal type={showPost} initial={editingReport} catalog={catalog} onClose={()=>{setShowPost(false);setEditingReport(null)}} notify={notify} request={request} onCreated={async(id,type)=>{setShowPost(false);setEditingReport(null);await refresh();setSearch('');if(fullBackend){setFilter(type==='LOST'?'FOUND':'LOST');await openMatches(id,type)}else{goto('mine')}}}/>}
+    {showPost&&<PostModal type={showPost} initial={editingReport} catalog={catalog} onClose={()=>{setShowPost(false);setEditingReport(null)}} notify={notify} request={request} onCreated={async(id,type)=>{setShowPost(false);setEditingReport(null);await refresh();setSearch('');await openMatches(id);}}/>}
     {selected&&<DetailModal report={selected} me={me} request={request} notify={notify} onClose={()=>setSelected(null)} onAuth={()=>{setSelected(null);openAuth()}} refresh={refresh} fullBackend={fullBackend} onChat={()=>{setChatReport(selected);setSelected(null)}}/>}
     {chatReport&&<Modal wide onClose={()=>setChatReport(null)}><ContactsScreen user={me} initialReport={chatReport} onClose={()=>setChatReport(null)}/></Modal>}
     {notice&&<div className={'toast ' +(notice.error?'error':'')}><span>{notice.error?'⚠':'✓'}</span> {notice.text}<button onClick={()=>setNotice(null)}><X size={15}/></button></div>}
@@ -296,7 +302,7 @@ function PostModal({type,initial,catalog,onClose,notify,request,onCreated}){
    const result=initial?await api(`/reports/${initial.id}`,{method:'PUT',body:JSON.stringify(body)}):await api('/reports',{method:'POST',body:JSON.stringify(body)});
    const id=initial?.id||result.id;
    for(const file of images){const fd=new FormData();fd.append('file',file);await api(`/uploads/reports/${id}`,{method:'POST',body:fd})}
-   notify(initial?'Đã cập nhật bài đăng.':(fullBackend?'Đã đăng tin. Đang kiểm tra các bài đăng đối lập.':'Đã đăng tin thành công.'));await onCreated(id,form.type);
+   notify(initial?'Đã cập nhật bài đăng.':'Đã đăng tin. Đang kiểm tra bài đăng tương tự.');await onCreated(id,form.type);
  })};
  return <Modal wide onClose={onClose}><div className="modalhead left"><span className="kicker">ĐĂNG THÔNG TIN ĐỒ THẤT LẠC</span><h2>{initial?'Chỉnh sửa bài đăng':form.type==='LOST'?'Tôi đang tìm đồ':'Tôi đã nhặt được đồ'}</h2><p>Càng mô tả rõ, gợi ý tương đồng càng hữu ích. Tránh công khai các đặc điểm dùng để xác minh chủ sở hữu.</p></div>
  <form className="form postform" onSubmit={submit}><div className="twotabs"><button type="button" disabled={!!initial} className={form.type==='LOST'?'picked':''} onClick={()=>update('type','LOST')}><PackageOpen size={16}/> Báo mất đồ</button><button type="button" disabled={!!initial} className={form.type==='FOUND'?'picked':''} onClick={()=>update('type','FOUND')}><PackageCheck size={16}/> Báo nhặt được</button></div>

@@ -49,6 +49,21 @@ class FakeAPI:
    id=p.split('/')[2]; x=next((x for x in self.reports if x['id']==id),None)
    if x and self.account and x['userId']==self.account['id']:x['status']='RETURNED';body={'id':id,'status':'RETURNED'}
    else:code=403;body={'message':'Forbidden'}
+  elif re.fullmatch(r'/(?:items|reports)/[^/]+/matches',p) and method=='GET':
+   # The Matching MVP returns opposite-type reports owned by another user.
+   report_id=p.split('/')[2]
+   source=next((x for x in self.reports if x['id']==report_id),None)
+   if not self.account or source is None or source['userId'] != self.account['id']:
+    code=404;body={'message':'Không tìm thấy bài đăng của bạn.'}
+   else:
+    matches=[]
+    if source['type']=='LOST' and source['itemName']=='Laptop Lenovo':
+     found={'id':'00000000-0000-0000-0000-000000000099','type':'FOUND','status':'OPEN',
+            'userId':'viewer-id','itemName':'Máy tính Lenovo','description':'Màu ghi, nhặt ở Tòa A',
+            'location':'Tòa A','eventTime':'2026-10-22T10:00:00Z','images':[]}
+     matches=[{'id':found['id'],'score':88,'level':'HIGH','coverage':0.9,
+               'reasons':['Cùng thương hiệu','Địa điểm tương đồng'],'report':found}]
+    body={'reportId':report_id,'threshold':50,'matches':matches}
   elif p.startswith('/uploads/reports/') and method=='POST':code=201;body={'url':'/uploads/test.png'}
   elif p=='/contacts' and method=='GET':body={'items':self.contacts}
   elif p=='/contacts' and method=='POST':
@@ -204,9 +219,15 @@ def run():
     p.locator('.postform select').first.select_option('1')
     p.locator('.postform input[type=file]').set_input_files({'name':'test.png','mimeType':'image/png','buffer':b'fake image test'})
     p.get_by_role('button',name='Đăng tin ngay').click()
-    p.get_by_text('Bài đăng của tôi',exact=True).first.wait_for(timeout=5000)
+    # The Matching MVP intentionally opens recommendations immediately after posting.
+    expect(p.locator('.matching-page')).to_be_visible(timeout=5000)
+    expect(p.locator('.reportselector')).to_contain_text('Laptop Lenovo')
+    expect(p.locator('.matching-result')).to_have_count(1)
+    expect(p.locator('.matching-result')).to_contain_text('Máy tính Lenovo')
+    expect(p.locator('.matching-result')).to_contain_text('88')
     assert any(x[0]=='POST' and x[1]=='/reports' and x[3].get('itemName')=='Laptop Lenovo' for x in a.calls)
     assert any(x[1].startswith('/uploads/reports/') for x in a.calls)
+    assert any(x[0]=='GET' and re.fullmatch(r'/reports/[^/]+/matches',x[1]) for x in a.calls)
     assert any(x['itemName']=='Laptop Lenovo' for x in a.reports)
     assert not e,e
    finally:c.close()
@@ -242,9 +263,14 @@ def run():
   def coming_soon():
    c,p,a,e=setup(browser,account=OWNER)
    try:
-    disallowed=('/claims','/matching','/notifications','/handovers','/operations')
+    disallowed=('/claims','/notifications','/handovers','/operations')
     p.get_by_role('button',name='Mở menu').click() if p.get_by_role('button',name='Mở menu').is_visible() else None
-    for label in ['Gợi ý phù hợp','Yêu cầu nhận đồ','Hỗ trợ & ký gửi','Phòng bàn giao']:
+    # Matching is supported now; check that the other four features stay disabled.
+    p.locator('.nav button').filter(has_text='Gợi ý phù hợp').click()
+    expect(p.locator('.matching-page')).to_be_visible()
+    expect(p.locator('.reportselector')).to_contain_text('Ví da đen')
+    assert any(x[0]=='GET' and re.fullmatch(r'/reports/[^/]+/matches',x[1]) for x in a.calls)
+    for label in ['Yêu cầu nhận đồ','Hỗ trợ & ký gửi','Phòng bàn giao']:
      p.locator('.nav button').filter(has_text=label).click()
      assert p.get_by_text('TÍNH NĂNG ĐANG PHÁT TRIỂN').is_visible()
      p.get_by_role('button',name='Mở menu').click() if p.get_by_role('button',name='Mở menu').is_visible() else None
@@ -253,7 +279,7 @@ def run():
     assert not any(x[1].startswith(disallowed) for x in a.calls),str(a.calls)
     assert not e,e
    finally:c.close()
-  case('5 unsupported features do not call API',coming_soon)
+  case('Matching enabled; four unsupported features do not call API',coming_soon)
   def layouts():
    failures=[]
    for width in [320,375,390,600,601,768,850,851,1024,1440]:
