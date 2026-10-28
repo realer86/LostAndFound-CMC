@@ -24,11 +24,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     options.Events.OnRedirectToAccessDenied=context=>{context.Response.StatusCode=403;return Task.CompletedTask;};
 })
 .AddCookie("AdminCookie",options=>{
-    // Dedicated admin browser session: public-site login cannot authorize admin API.
     options.Cookie.Name="lostfound.admin.session";
     options.Cookie.HttpOnly=true;
     options.Cookie.SameSite=SameSiteMode.Strict;
-    options.Cookie.SecurePolicy=CookieSecurePolicy.SameAsRequest; // localhost HTTP only
+    options.Cookie.SecurePolicy=CookieSecurePolicy.SameAsRequest;
     options.ExpireTimeSpan=TimeSpan.FromHours(8);
     options.Events.OnRedirectToLogin=context=>{context.Response.StatusCode=401;return Task.CompletedTask;};
     options.Events.OnRedirectToAccessDenied=context=>{context.Response.StatusCode=403;return Task.CompletedTask;};
@@ -43,7 +42,6 @@ builder.Services.AddRateLimiter(options=>{
 builder.Services.AddMemoryCache();
 var app=builder.Build();
 app.Use(async(context,next)=>{
-    // Refuse cross-origin browser mutations made using the session cookie.
     if(!HttpMethods.IsGet(context.Request.Method)&&!HttpMethods.IsHead(context.Request.Method)
       && context.Request.Headers.TryGetValue("Origin",out var origin))
     {
@@ -86,15 +84,12 @@ app.MapGet("/api/health",()=>Results.Ok(new{status="ok",app="LostFound Campus",u
 await using(var scope=app.Services.CreateAsyncScope())
 {
     var db=scope.ServiceProvider.GetRequiredService<LostFoundDb>();
-    // EnsureCreated for zero-setup local demo; move to EF migrations for real releases.
     const int attempts=25;
     for(var i=0;i<attempts;i++)
     {
         try{await db.Database.EnsureCreatedAsync();break;}
         catch when(i<attempts-1){await Task.Delay(2000);}
     }
-    // Incremental schema add-on, preserving the existing Docker database and users/reports.
-    // EnsureCreatedAsync() does NOT add new tables to an already-created database.
     await db.Database.ExecuteSqlRawAsync("""
         CREATE TABLE IF NOT EXISTS "HandoverRooms" (
           "Id" uuid PRIMARY KEY,
@@ -125,7 +120,6 @@ await using(var scope=app.Services.CreateAsyncScope())
         );
         CREATE INDEX IF NOT EXISTS "IX_HandoverAppointments_RoomId_CreatedAt" ON "HandoverAppointments"("RoomId", "CreatedAt");
     """);
-    // Additive, idempotent schema upgrade: no Docker volume deletion required.
     await db.Database.ExecuteSqlRawAsync("""
         ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "SuspendedUntil" timestamp with time zone;
         ALTER TABLE "Reports" ADD COLUMN IF NOT EXISTS "ExpiresAt" timestamp with time zone;
@@ -149,7 +143,6 @@ await using(var scope=app.Services.CreateAsyncScope())
         );
         CREATE UNIQUE INDEX IF NOT EXISTS "IX_CustodyRecords_ReportId" ON "CustodyRecords"("ReportId");
     """);
-    // Backfill rooms for previously APPROVED claims, without touching completed claims.
     var approvedIds=await db.Claims.AsNoTracking()
         .Where(c=>c.Status=="APPROVED" && c.HandedOverAt==null).Select(c=>c.Id).ToListAsync();
     var existingRoomClaims=await db.HandoverRooms.Select(r=>r.ClaimId).ToListAsync();
@@ -185,8 +178,6 @@ await using(var scope=app.Services.CreateAsyncScope())
         }
         var engine=scope.ServiceProvider.GetRequiredService<MatchEngine>();
         foreach(var reportId in await db.Reports.Where(x=>x.Status=="OPEN").Select(x=>x.Id).ToListAsync())await engine.MatchAsync(reportId);
-        // One-time notification backfill for matching rows from earlier prototype versions.
-        // The original bell only notified scores >=80, while "Gợi ý phù hợp" showed >=55.
         var activeMatches=await db.Matches.AsNoTracking()
             .Where(x=>x.Status=="SUGGESTED" && x.Score>=55).ToListAsync();
         var pairIds=activeMatches.SelectMany(x=>new[]{x.LostReportId,x.FoundReportId}).Distinct().ToArray();
