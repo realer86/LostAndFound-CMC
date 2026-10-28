@@ -1,0 +1,137 @@
+{
+  "info": {
+    "name": "Foundly Sprint 1 – Issues #6 and #8",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Run requests in order. Cookie-based localhost development demo."
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "itemId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 GET Categories – Issue #6",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/categories"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 Categories', () => pm.response.to.have.status(200));",
+              "pm.test('Has seed categories', () => pm.expect(pm.response.json().length).to.be.above(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 GET Locations – Issue #6",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/locations"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 Locations', () => pm.response.to.have.status(200));",
+              "pm.test('Has seed locations', () => pm.expect(pm.response.json().length).to.be.above(0));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 Login – get session cookie",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/auth/login",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"email\": \"minh@campus.edu\", \"password\": \"Demo12345!\"}"
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 Login', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 POST Item – expect 201 Created",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "pm.variables.set('eventTime', new Date(Date.now()-10*60*1000).toISOString());"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('201 Created', () => pm.response.to.have.status(201));",
+              "pm.test('Location header present', () => pm.expect(pm.response.headers.get('Location')).to.exist);",
+              "if(pm.response.code===201){pm.collectionVariables.set('itemId', pm.response.json().id);}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/items",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"type\": \"LOST\",\n  \"itemName\": \"Ví thử nghiệm Sprint 1\",\n  \"description\": \"Postman create test\",\n  \"categoryId\": null,\n  \"locationId\": null,\n  \"eventTime\": \"{{eventTime}}\"\n}"
+        }
+      }
+    },
+    {
+      "name": "05 PATCH returned – Issue #8",
+      "request": {
+        "method": "PATCH",
+        "url": "{{baseUrl}}/api/items/{{itemId}}/status"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 Returned', () => pm.response.to.have.status(200));",
+              "pm.test('Status RETURNED', () => pm.expect(pm.response.json().status).to.eql('RETURNED')); "
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
