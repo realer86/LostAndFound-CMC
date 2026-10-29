@@ -288,7 +288,7 @@ def run():
     assert any(x[:2]==('GET','/operations/custody/desks') for x in a.calls)
 
     p.locator('.nav button').filter(has_text='Phòng bàn giao').click()
-    expect(p.get_by_role('heading',name='Phòng bàn giao')).to_be_visible()
+    expect(p.get_by_role('heading',name='Phòng bàn giao',exact=True)).to_be_visible()
     assert any(x[:2]==('GET','/handovers') for x in a.calls)
 
     p.get_by_role('button',name='Thông báo').click()
