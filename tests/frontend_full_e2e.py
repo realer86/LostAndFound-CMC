@@ -34,6 +34,9 @@ class FakeAPI:
   elif p=='/auth/register':body={'devVerificationCode':'123456'}
   elif p=='/auth/verify':body={'message':'verified'}
   elif p=='/auth/logout':self.account=None;body={'message':'logout'}
+  # The integrated UI loads these endpoints when a signed-in user refreshes state.
+  elif p in ('/claims/mine','/claims/inbox','/notifications','/handovers','/operations/cases/mine','/operations/custody/mine') and method=='GET':body=[]
+  elif p=='/operations/custody/desks' and method=='GET':body=['Quầy Lost & Found – Thư viện','Quầy Bảo vệ']
   elif p in ('/items/catalog','/reports/catalog'):
    body={'categories':[{'id':1,'name':'Điện tử'},{'id':2,'name':'Ví & túi'}],'locations':[{'id':1,'name':'Tòa A'},{'id':2,'name':'Thư viện'}]}
   elif p in ('/items','/reports') and method=='GET':
@@ -45,6 +48,12 @@ class FakeAPI:
    else:
     self.seq+=1;id=f'00000000-0000-0000-0000-{self.seq:012d}'
     x={'id':id,'status':'OPEN','userId':self.account['id'],'images':[],'createdAt':'2026-10-22T10:00:00Z','eventTime':data.get('eventTime'),'location':'Tòa A','category':'Điện tử',**data};self.reports.insert(0,x);code=201;body={'id':id,'message':'created'}
+  elif re.fullmatch(r'/reports/[^/]+/close',p) and method=='PATCH':
+   report_id=p.split('/')[2]
+   item=next((x for x in self.reports if x['id']==report_id),None)
+   if item and self.account and item['userId']==self.account['id'] and item['status']=='OPEN':
+    item['status']='CLOSED';body={'id':report_id,'status':'CLOSED'}
+   else:code=403;body={'message':'Forbidden'}
   elif re.fullmatch(r'/reports/[^/]+/status|/items/[^/]+/status',p) and method=='PATCH':
    id=p.split('/')[2]; x=next((x for x in self.reports if x['id']==id),None)
    if x and self.account and x['userId']==self.account['id']:x['status']='RETURNED';body={'id':id,'status':'RETURNED'}
@@ -220,7 +229,7 @@ def run():
     p.locator('.postform select').first.select_option('1')
     p.locator('.postform input[type=file]').set_input_files({'name':'test.png','mimeType':'image/png','buffer':b'fake image test'})
     p.get_by_role('button',name='Đăng tin ngay').click()
-    # The Matching MVP intentionally opens recommendations immediately after posting.
+    # Posting must still reach Matching after the new Claims and notification refreshes.
     expect(p.locator('.matching-page')).to_be_visible(timeout=5000)
     expect(p.locator('.reportselector')).to_contain_text('Laptop Lenovo')
     expect(p.locator('.matching-result')).to_have_count(1)
@@ -238,13 +247,15 @@ def run():
    try:
     p.get_by_role('button',name='Mở menu').click() if p.get_by_role('button',name='Mở menu').is_visible() else None;p.get_by_role('button',name='Bài của tôi').click()
     p.wait_for_timeout(100)
-    p.once('dialog',lambda dialog:dialog.accept())
-    p.locator('.mycard').filter(has_text='Ví da đen').get_by_role('button',name=re.compile('Đã hoàn trả')).click()
-    assert next(x for x in a.reports if x['itemName']=='Ví da đen')['status']=='RETURNED'
-    assert any(x[0]=='PATCH' and x[1].endswith('/status') for x in a.calls)
+    # Closing a report is no longer equivalent to handing an item back.
+    card=p.locator('.mycard').filter(has_text='Ví da đen')
+    card.get_by_role('button',name='Đóng bài').click()
+    expect(card).to_contain_text('CLOSED')
+    assert next(x for x in a.reports if x['itemName']=='Ví da đen')['status']=='CLOSED'
+    assert any(x[0]=='PATCH' and x[1].endswith('/close') for x in a.calls)
     assert not e,e
    finally:c.close()
-  case('my reports and mark returned',return_post)
+  case('my reports and close without bypassing handover',return_post)
   def support():
    c,p,a,e=setup(browser,account=VIEWER)
    try:
@@ -257,26 +268,36 @@ def run():
     assert not e,e
    finally:c.close()
   case('official support and directory without direct user contact',support)
-  def coming_soon():
+  def enabled_features():
    c,p,a,e=setup(browser,account=OWNER)
    try:
-    disallowed=('/claims','/notifications','/handovers','/operations')
-    p.get_by_role('button',name='Mở menu').click() if p.get_by_role('button',name='Mở menu').is_visible() else None
-    # Matching is supported now; check that the other four features stay disabled.
     p.locator('.nav button').filter(has_text='Gợi ý phù hợp').click()
     expect(p.locator('.matching-page')).to_be_visible()
     expect(p.locator('.reportselector')).to_contain_text('Ví da đen')
     assert any(x[0]=='GET' and re.fullmatch(r'/reports/[^/]+/matches',x[1]) for x in a.calls)
-    for label in ['Yêu cầu nhận đồ','Hỗ trợ & ký gửi','Phòng bàn giao']:
-     p.locator('.nav button').filter(has_text=label).click()
-     assert p.get_by_text('TÍNH NĂNG ĐANG PHÁT TRIỂN').is_visible()
-     p.get_by_role('button',name='Mở menu').click() if p.get_by_role('button',name='Mở menu').is_visible() else None
+
+    # Claims, custody, handover and notifications are now real screens, not placeholders.
+    p.locator('.nav button').filter(has_text='Yêu cầu nhận đồ').click()
+    expect(p.get_by_role('heading',name='Yêu cầu nhận đồ')).to_be_visible()
+    assert any(x[:2]==('GET','/claims/mine') for x in a.calls)
+    assert any(x[:2]==('GET','/claims/inbox') for x in a.calls)
+
+    p.locator('.nav button').filter(has_text='Hỗ trợ & ký gửi').click()
+    expect(p.get_by_role('heading',name='Hỗ trợ & ký gửi')).to_be_visible()
+    expect(p.get_by_text('Yêu cầu ký gửi đồ nhặt được')).to_be_visible()
+    assert any(x[:2]==('GET','/operations/custody/desks') for x in a.calls)
+
+    p.locator('.nav button').filter(has_text='Phòng bàn giao').click()
+    expect(p.get_by_role('heading',name='Phòng bàn giao')).to_be_visible()
+    assert any(x[:2]==('GET','/handovers') for x in a.calls)
+
     p.get_by_role('button',name='Thông báo').click()
-    assert p.get_by_text('TÍNH NĂNG ĐANG PHÁT TRIỂN').is_visible()
-    assert not any(x[1].startswith(disallowed) for x in a.calls),str(a.calls)
+    expect(p.get_by_role('heading',name='Thông báo')).to_be_visible()
+    assert any(x[:2]==('GET','/notifications') for x in a.calls)
+    assert p.get_by_text('TÍNH NĂNG ĐANG PHÁT TRIỂN').count()==0
     assert not e,e
    finally:c.close()
-  case('Matching enabled; four unsupported features do not call API',coming_soon)
+  case('Matching, Claims, custody, handover and notifications enabled',enabled_features)
   def layouts():
    failures=[]
    for width in [320,375,390,600,601,768,850,851,1024,1440]:
