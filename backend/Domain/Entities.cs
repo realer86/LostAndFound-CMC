@@ -9,10 +9,14 @@ public class AppUser
     [MaxLength(120)] public string FullName { get; set; } = "";
     public string PasswordHash { get; set; } = "";
     [MaxLength(16)] public string Role { get; set; } = "USER";
+    [MaxLength(20)] public string? DepartmentCode { get; set; }
     public DateTime? SuspendedUntil { get; set; }
     public DateTime? EmailVerifiedAt { get; set; }
     [MaxLength(100)] public string? VerifyTokenHash { get; set; }
     public DateTime? VerifyExpiresAt { get; set; }
+    public DateTime? OtpSentAt { get; set; }
+    public int OtpAttemptCount { get; set; }
+    [MaxLength(128)] public string? GoogleSubject { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
@@ -116,4 +120,108 @@ public class CampusDirectoryEntry
     [MaxLength(140)] public string OfficeHours { get; set; } = "";
     [MaxLength(30)] public string Category { get; set; } = "Khác";
     public bool IsActive { get; set; } = true;
+}
+
+// Foundly operations: Claims, handover appointments, messaging and custody.
+public class ClaimRequest
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid FoundReportId { get; set; }
+    public Guid ClaimantId { get; set; }
+    [MaxLength(4000)] public string Evidence { get; set; } = "";
+    [MaxLength(16)] public string Status { get; set; } = "PENDING";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? ReviewedAt { get; set; }
+    public DateTime? HandedOverAt { get; set; }
+}
+// A room is available only to the claimant and finder of an APPROVED claim.
+// The verified profiles show display names, not contact details.
+public class HandoverRoom
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ClaimId { get; set; }
+    public ClaimRequest? Claim { get; set; }
+    [MaxLength(24)] public string Status { get; set; } = "ARRANGING";
+    public DateTime? HolderConfirmedAt { get; set; }
+    public DateTime? ClaimantConfirmedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+public class HandoverMessage
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid RoomId { get; set; }
+    public HandoverRoom? Room { get; set; }
+    public Guid SenderId { get; set; }
+    [MaxLength(1500)] public string Content { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+public class HandoverAppointment
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid RoomId { get; set; }
+    public HandoverRoom? Room { get; set; }
+    public Guid ProposedById { get; set; }
+    [MaxLength(120)] public string Place { get; set; } = "";
+    public DateTime MeetingAt { get; set; }
+    [MaxLength(20)] public string Status { get; set; } = "PROPOSED";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? RespondedAt { get; set; }
+    public DateTime? ReminderSentAt { get; set; }
+}
+public class Notification
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    [MaxLength(60)] public string Type { get; set; } = "INFO";
+    [MaxLength(500)] public string Content { get; set; } = "";
+    public Guid? ReportId { get; set; }
+    public bool IsRead { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+public class AuditLog
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ActorId { get; set; }
+    [MaxLength(70)] public string Action { get; set; } = "";
+    [MaxLength(70)] public string TargetType { get; set; } = "";
+    public Guid TargetId { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+
+public class CustodyRecord
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ReportId { get; set; }
+    public Guid RequestedById { get; set; }
+    [MaxLength(120)] public string Desk { get; set; } = "";
+    [MaxLength(24)] public string Status { get; set; } = "REQUESTED";
+    [MaxLength(120)] public string? ReceiptCode { get; set; }
+    public Guid? AcceptedByAdminId { get; set; }
+    public DateTime? ReceivedAt { get; set; }
+    public DateTime? ReleasedAt { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Official support channel linked to an actual case or custody record.
+// These are NOT peer-to-peer conversations or public contact cards.
+public class SupportThread
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid UserId { get; set; }
+    public Guid? CaseId { get; set; }
+    public Guid? CustodyId { get; set; }
+    [MaxLength(20)] public string Department { get; set; } = "ADMIN";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
+}
+public class SupportMessage
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ThreadId { get; set; }
+    public Guid SenderId { get; set; }
+    [MaxLength(12)] public string SenderType { get; set; } = "USER";
+    [MaxLength(1500)] public string Content { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

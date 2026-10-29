@@ -65,6 +65,7 @@ class FakeAPI:
                'reasons':['Cùng thương hiệu','Địa điểm tương đồng'],'report':found}]
     body={'reportId':report_id,'threshold':50,'matches':matches}
   elif p.startswith('/uploads/reports/') and method=='POST':code=201;body={'url':'/uploads/test.png'}
+  elif p=='/support/threads' and method=='GET':body={'items':[]}
   elif p=='/contacts' and method=='GET':body={'items':self.contacts}
   elif p=='/contacts' and method=='POST':
    self.seq+=1;c={'id':f'00000000-0000-0000-0000-{self.seq:012d}','reportId':data.get('reportId'),'reportTitle':'Ví da đen','otherDisplayName':'Owner Test'};self.contacts.append(c);code=201;body=c
@@ -137,7 +138,7 @@ def run():
    c,p,a,e=setup(browser)
    try:
     p.get_by_role('button',name='Đăng nhập',exact=True).first.click()
-    p.locator('input[type=email]').fill('owner@campus.edu');p.locator('input[type=password]').fill('SomeDemoPassword')
+    p.locator('input[type=email]').fill('owner@st.cmcu.edu.vn');p.locator('input[type=password]').fill('SomeDemoPassword')
     p.locator('.modal button[type=submit]').click()
     p.get_by_role('button',name='Đăng xuất').wait_for(timeout=4000)
     assert any(x[1]=='/auth/login' for x in a.calls)
@@ -151,9 +152,9 @@ def run():
    c,p,a,e=setup(browser)
    try:
     p.get_by_role('button',name='Đăng nhập',exact=True).first.click();p.get_by_role('button',name='Đăng ký ngay').click()
-    p.locator('input[placeholder="Nguyễn Văn A"]').fill('Test User');p.locator('input[type=email]').fill('user@campus.edu');p.locator('input[type=password]').fill('strongPassword2026!')
+    p.locator('input[placeholder="Nguyễn Văn A"]').fill('Test User');p.locator('input[type=email]').fill('user@st.cmcu.edu.vn');p.locator('input[type=password]').fill('strongPassword2026!')
     p.locator('.modal button[type=submit]').click()
-    p.get_by_text('Xác minh email',exact=True).wait_for()
+    p.get_by_text('Xác minh email trường',exact=True).wait_for()
     p.locator('input[pattern="[0-9]{6}"]').fill('123456');p.locator('.modal button[type=submit]').click()
     p.get_by_text('Đăng nhập vào Foundly',exact=True).wait_for()
     assert any(x[1]=='/auth/register' for x in a.calls) and any(x[1]=='/auth/verify' for x in a.calls)
@@ -178,7 +179,7 @@ def run():
     p.locator('.modalclose').click()
     login.click()
     assert p.locator('.modalhead h2').inner_text()=='Đăng nhập vào Foundly'
-    assert 'KẾT NỐI CỘNG ĐỒNG' in p.locator('.modalhead').inner_text()
+    assert 'TÀI KHOẢN TRƯỜNG' in p.locator('.modalhead').inner_text()
     p.locator('.modalclose').click()
     post.click()
     assert p.locator('.modalhead h2').inner_text()=='Đăng nhập vào Foundly'
@@ -199,7 +200,7 @@ def run():
     p.get_by_role('button',name='Mở menu').click()
     p.locator('.mobile-nav-actions').get_by_role('button',name='Đăng nhập').click()
     assert p.locator('.modalhead h2').inner_text()=='Đăng nhập vào Foundly'
-    p.locator('.modal input[type=email]').fill('owner@campus.edu')
+    p.locator('.modal input[type=email]').fill('owner@st.cmcu.edu.vn')
     p.locator('.modal input[type=password]').fill('demo-password')
     p.locator('.modal button[type=submit]').click()
     p.get_by_role('button',name='Mở menu').click()
@@ -244,22 +245,18 @@ def run():
     assert not e,e
    finally:c.close()
   case('my reports and mark returned',return_post)
-  def chat():
+  def support():
    c,p,a,e=setup(browser,account=VIEWER)
    try:
-    p.locator('.reportcard').filter(has_text='Ví da đen').click()
-    p.get_by_role('button',name=re.compile('Liên hệ người đăng')).click()
-    p.wait_for_timeout(150)
-    assert any(x[0]=='POST' and x[1]=='/contacts' for x in a.calls),str(a.calls)
-    assert any(x[0]=='GET' and x[1]=='/contacts' for x in a.calls)
-    p.locator('#s2-draft').fill('Tôi vừa tìm thấy đồ');p.get_by_role('button',name='Gửi tin nhắn').click()
-    p.wait_for_timeout(80)
-    assert any(x[1]=='/messages' and x[0]=='POST' for x in a.calls)
-    p.get_by_role('tab',name='Danh bạ').click()
-    assert p.get_by_text('Phòng CTSV').is_visible()
+    p.locator('.nav button').filter(has_text='Hỗ trợ & Danh bạ').click()
+    expect(p.get_by_role('heading',name='Hỗ trợ & Danh bạ')).to_be_visible()
+    assert any(x[1]=='/support/threads' and x[0]=='GET' for x in a.calls)
+    assert not any(x[1]=='/contacts' and x[0]=='POST' for x in a.calls)
+    p.get_by_role('button',name='Danh bạ phòng ban').click()
+    expect(p.get_by_text('Phòng CTSV')).to_be_visible()
     assert not e,e
    finally:c.close()
-  case('contacts, send message and directory',chat)
+  case('official support and directory without direct user contact',support)
   def coming_soon():
    c,p,a,e=setup(browser,account=OWNER)
    try:

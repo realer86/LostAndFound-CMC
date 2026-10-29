@@ -146,3 +146,7 @@
     color: #fff;
   }
 }
+
+/* School account authentication */
+.school-google-login{display:flex;flex-direction:column;align-items:center;gap:5px;margin:14px auto 6px;min-height:52px}
+.school-google-login p{font-size:12px;color:var(--muted,#607086);text-align:center;margin:0}

@@ -1,6 +1,11 @@
 using LostFound.Api.Data;
 using LostFound.Api.Domain;
+using LostFound.Api.Services;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,6 +14,9 @@ builder.Services.AddControllers();
 builder.Services.AddDbContext<LostFoundDb>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Main")));
 builder.Services.AddScoped<IPasswordHasher<AppUser>, PasswordHasher<AppUser>>();
+builder.Services.AddSingleton<SchoolEmailPolicy>();
+builder.Services.AddScoped<EmailOtpSender>();
+builder.Services.AddHttpClient("GoogleTokenInfo", c => c.Timeout = TimeSpan.FromSeconds(10));
 // Bản Final dùng Cookie Authentication; giữ nguyên cơ chế đăng nhập cho Form POST.
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -18,6 +26,21 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.ExpireTimeSpan = TimeSpan.FromHours(12);
+        // Reject older cookies as soon as the school-only policy takes effect.
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var rawId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var db = context.HttpContext.RequestServices.GetRequiredService<LostFoundDb>();
+            var policy = context.HttpContext.RequestServices.GetRequiredService<SchoolEmailPolicy>();
+            var user = Guid.TryParse(rawId, out var id) ? await db.Users.FindAsync(id) : null;
+            if (user is null || user.Role != context.Principal?.FindFirstValue(ClaimTypes.Role) ||
+                policy.AccountType(user.Email) is null || user.EmailVerifiedAt is null ||
+                (user.SuspendedUntil.HasValue && user.SuspendedUntil > DateTime.UtcNow))
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            }
+        };
         options.Events.OnRedirectToLogin = context =>
         {
             context.Response.StatusCode = 401;
@@ -29,7 +52,46 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             return Task.CompletedTask;
         };
     });
+// Separate cookie and scheme for back-office. A public login cannot access admin APIs.
+builder.Services.AddAuthentication().AddCookie("AdminCookie", options =>
+{
+    options.Cookie.Name = "foundly.admin.session";
+    options.Cookie.Path = "/api/admin";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    options.Events.OnRedirectToLogin = context => { context.Response.StatusCode=401; return Task.CompletedTask; };
+    options.Events.OnRedirectToAccessDenied = context => { context.Response.StatusCode=403; return Task.CompletedTask; };
+    options.Events.OnValidatePrincipal = async context =>
+    {
+        var rawId=context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+        var db=context.HttpContext.RequestServices.GetRequiredService<LostFoundDb>();
+        var user=Guid.TryParse(rawId,out var id)?await db.Users.FindAsync(id):null;
+        var policy=context.HttpContext.RequestServices.GetRequiredService<SchoolEmailPolicy>();
+        if(user is null || user.Role != context.Principal?.FindFirstValue(ClaimTypes.Role) ||
+           (user.Role!="ADMIN" && (user.Role!="STAFF" || user.DepartmentCode is not ("SECURITY" or "LIBRARY" or "DORM"))) ||
+           policy.AccountType(user.Email) is null || user.EmailVerifiedAt is null ||
+           (user.SuspendedUntil.HasValue && user.SuspendedUntil>DateTime.UtcNow))
+        {
+            context.RejectPrincipal();
+            await context.HttpContext.SignOutAsync("AdminCookie");
+        }
+    };
+});
 builder.Services.AddAuthorization();
+// A coarse IP-based limit complements per-account OTP cooldown/attempt limits.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30, Window = TimeSpan.FromMinutes(5), QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+});
 var app = builder.Build();
 
 // Giữ Origin guard của bản Final, thu gọn cho Web Sprint 1 trên localhost:5175.
@@ -41,7 +103,7 @@ app.Use(async (context, next) =>
     {
         if (!Uri.TryCreate(origin.ToString(), UriKind.Absolute, out var uri) ||
             !(uri.Host == "localhost" || uri.Host == "127.0.0.1") ||
-            uri.Port is not (5175 or 8081))
+            uri.Port is not (5175 or 5174 or 8081))
         {
             context.Response.StatusCode = 403;
             await context.Response.WriteAsJsonAsync(new { message = "Origin không được phép." });
@@ -52,6 +114,7 @@ app.Use(async (context, next) =>
 });
 app.UseStaticFiles();
 app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -71,6 +134,12 @@ await using (var scope = app.Services.CreateAsyncScope())
     // cho cả CSDL Sprint 1 cũ và CSDL tạo mới mà không xóa dữ liệu.
     var schemaPath = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "04_sprint2_contacts.sql");
     await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(schemaPath));
+    var authSchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "05_school_auth.sql");
+    await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(authSchema));
+    var operationsSchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "06_operations.sql");
+    await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(operationsSchema));
+    var supportSchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "07_support_channels.sql");
+    await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(supportSchema));
 
     // Sửa vấn đề seed liên kết trong Final: mỗi danh mục/khu vực được kiểm tra độc lập.
     if (!await db.Categories.AnyAsync())
@@ -94,22 +163,7 @@ await using (var scope = app.Services.CreateAsyncScope())
         await db.SaveChangesAsync();
     }
 
-    if (app.Environment.IsDevelopment())
-    {
-        var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<AppUser>>();
-        var demoUsers = new[]
-        {
-            ("minh@campus.edu", "Minh - Người mất đồ", "Demo12345!"),
-            ("lan@campus.edu", "Lan - Người nhặt đồ", "Demo12345!")
-        };
-        foreach (var (email, name, password) in demoUsers)
-        {
-            if (await db.Users.AnyAsync(x => x.Email == email)) continue;
-            var user = new AppUser { Email = email, FullName = name, EmailVerifiedAt = DateTime.UtcNow };
-            user.PasswordHash = hasher.HashPassword(user, password);
-            db.Users.Add(user);
-        }
-        await db.SaveChangesAsync();
-    }
+    // Explicit opt-in, Development-only local test identities. Never create real school accounts.
+    await DevelopmentTestUsers.SeedIfEnabledAsync(scope.ServiceProvider);
 }
 app.Run();
