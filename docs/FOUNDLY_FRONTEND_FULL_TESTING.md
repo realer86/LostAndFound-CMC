@@ -62,7 +62,7 @@ python tests/system_smoke_e2e.py
 Remove-Item Env:FOUNDLY_ALLOW_TEST_WRITES
 ```
 
-Ensure `ASPNETCORE_ENVIRONMENT=Development`; the script needs `devVerificationCode` from register and cannot run in production. If real Docker/API system testing fails, **do not merge**. Address failing endpoint and re-run.
+Ensure `ASPNETCORE_ENVIRONMENT=Development` and opt-in `AUTH_ALLOW_DEV_CODE=true` in the Docker environment; the script needs `devVerificationCode` from register and cannot run in production. If real Docker/API system testing fails, **do not merge**. Address failing endpoint and re-run.
 
 ## Manual browser acceptance before merge
 

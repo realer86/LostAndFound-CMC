@@ -2,14 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Search, Plus, Bell, Menu, MapPin, CalendarDays, ArrowUpRight, ArrowRight, PackageOpen, PackageCheck, ShieldCheck, LogOut, X, CheckCircle2, Sparkles, SlidersHorizontal, Images, LoaderCircle, ChevronLeft, Clock3, UserRound, ListChecks, LayoutDashboard, Check, Eye, Inbox, Zap, MessageCircle, LockKeyhole, RefreshCcw, Send, CalendarClock, MapPinned, MessagesSquare, CheckCheck } from 'lucide-react';
 import './style.css';
-import { useChatLogic } from './components/ChatLogic.jsx';
-import Sprint2ContactsView from './components/Sprint2ContactsView.jsx';
+import SupportInbox from './components/SupportInbox.jsx';
 import MatchingPanel from './components/MatchingPanel.jsx';
 
-// `sprint` keeps the existing repository's API contract; `full` enables the original Foundly Pro flows.
-// Sprint/main backend supports /api/reports (aliases /api/items), Sprint 2 chat and directory.
-// Do not set VITE_API_PROFILE=full until Full Operations endpoints are implemented and tested.
-const fullBackend = import.meta.env.VITE_API_PROFILE === 'full';
+// Claims, custody, notifications and handovers are served by the existing backend.
+const fullBackend = true;
 const upcomingFeatures = {
   claims: { title: 'Yêu cầu nhận đồ', description: 'Xác minh bằng chứng và phê duyệt yêu cầu cần API claims.' },
   operations: { title: 'Hỗ trợ & ký gửi', description: 'Quy trình hỗ trợ và ký gửi sẽ được kết nối khi API operations hoàn thành.' },
@@ -37,7 +34,6 @@ function App(){
   const [notifications,setNotifications]=useState([]),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null),[matchingLoading,setMatchingLoading]=useState(false);
   const [myClaims,setMyClaims]=useState([]),[inbox,setInbox]=useState([]);
   const [selectedClaimRoom,setSelectedClaimRoom]=useState(null);
-  const [chatReport,setChatReport]=useState(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null),[mobileNav,setMobileNav]=useState(false),[count,setCount]=useState(0);
   const sessionKeyRef=useRef(0); // Prevent old account responses from overwriting a switched account.
   const reportsRequestRef=useRef(0); // Only the newest search/filter response may update the feed.
@@ -67,7 +63,7 @@ function App(){
   const openPost=(type='LOST')=>{if(!me){openAuth();return;}setEditingReport(null);setShowPost(type)};
   const editPost=r=>{setEditingReport(r);setShowPost(r.type)};
   const goto=(name)=>{setPage(name);setMobileNav(false);window.scrollTo({top:0,behavior:'smooth'})};
-  // All Pro buttons are visible for planning, but unsupported flows NEVER make API requests.
+  // Requests require a signed-in school account and are validated on the backend.
   const gotoFeature=(name)=>{
     if(!fullBackend && upcomingFeatures[name]) { goto('upcoming-'+name); return; }
     if(!me) { openAuth(); return; }
@@ -97,7 +93,7 @@ function App(){
     // Clear every personal view to prevent the previous user's data lingering after account switching.
     setMe(null);setNotifications([]);setMine([]);setMatches([]);setSelectedMine(null);
     setMyClaims([]);setInbox([]);
-    setSelected(null);setChatReport(null);setShowAuth(false);setShowPost(false);setEditingReport(null);
+    setSelected(null);setShowAuth(false);setShowPost(false);setEditingReport(null);
     setSearch('');setFilter('ALL');goto('discover');notify('Đã đăng xuất. Bạn có thể đăng nhập tài khoản khác.');
   });
   return <div className="app">
@@ -110,7 +106,7 @@ function App(){
         <button className={page==='claims'||page==='upcoming-claims'?'active':''} onClick={()=>gotoFeature('claims')}>Yêu cầu nhận đồ{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='operations'||page==='upcoming-operations'?'active':''} onClick={()=>gotoFeature('operations')}>Hỗ trợ & ký gửi{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
-        <button className={page==='contacts'?'active':''} onClick={()=>goto('contacts')}>Liên hệ & Danh bạ</button>
+        <button className={page==='contacts'?'active':''} onClick={()=>goto('contacts')}>Hỗ trợ & Danh bạ</button>
         <div className="mobile-nav-actions">
           <button type="button" className="mobile-post" onClick={()=>{setMobileNav(false);openPost('LOST')}}><Plus size={16}/> Đăng tin</button>
           {!me&&<>
@@ -148,37 +144,36 @@ function App(){
       {reports.length===0&&<Empty icon={<Search/>} title="Chưa tìm thấy bài đăng phù hợp" detail="Thử một từ khóa khác hoặc đổi bộ lọc."/>}{reports.length<count&&<div className="loadmore"><button className="btn outline" onClick={()=>loadReports(reportPage+1).catch(e=>notify(e.message,true))}>Xem thêm bài đăng <ArrowRight size={16}/></button></div>}
       </section><section className="how"><div className="container"><span className="kicker">CÁCH FOUNDLY HOẠT ĐỘNG</span><h2>Ba bước để tìm lại đồ</h2><div className="steps"><div><span>01</span><PackageOpen size={26}/><h3>Đăng thông tin</h3><p>Chọn mất đồ hoặc nhặt được, mô tả đặc điểm và khu vực.</p></div><div><span>02</span><Sparkles size={26}/><h3>Nhận gợi ý</h3><p>{fullBackend?'Hệ thống so sánh nhiều đặc điểm, cả khi thứ tự đăng bài khác nhau.':'So khớp nhiều đặc điểm, kể cả khi tên gọi hoặc mô tả khác nhau.'}</p></div><div><span>03</span><ShieldCheck size={26}/><h3>Xác minh & nhận lại</h3><p>{fullBackend?'Cung cấp bằng chứng riêng tư trước khi hai bên xác nhận bàn giao.':'Chỉ khả dụng khi tích hợp claim và bàn giao.'}</p></div></div></div></section>
     </>}
-    {page==='contacts'&&<section className="container privatepage contacts-integrated"><ContactsScreen user={me}/></section>}
+    {page==='contacts'&&<section className="container privatepage contacts-integrated"><SupportInbox key={me?.id||'guest'} user={me}/></section>}
     {!fullBackend && page.startsWith('upcoming-') && (()=>{
       const feature=upcomingFeatures[page.slice('upcoming-'.length)];
       return feature&&<section className="container privatepage upcoming-page" role="status">
         <div className="upcoming-panel"><span className="kicker">TÍNH NĂNG ĐANG PHÁT TRIỂN</span>
           <Sparkles size={36}/><h1>{feature.title}</h1><p>{feature.description}</p>
           <div className="upcoming-actions"><button className="btn primary" onClick={()=>goto('discover')}>Về trang chủ</button>
-          <button className="btn outline" onClick={()=>goto('contacts')}>Mở Liên hệ & Danh bạ</button></div>
+          <button className="btn outline" onClick={()=>goto('contacts')}>Mở Hỗ trợ & Danh bạ</button></div>
         </div>
       </section>;
     })()}
-    {page==='mine'&&<section className="container privatepage"><PageHeader kicker="KHÔNG GIAN CỦA BẠN" title="Bài đăng của tôi" subtitle="Theo dõi bài đăng, tìm gợi ý tương đồng và liên hệ qua Hộp thư." action={<button className="btn primary" onClick={()=>openPost('LOST')}><Plus size={16}/> Đăng bài mới</button>}/><div className="cardgrid">{mine.map(r=><div key={r.id} className="mycard"><ReportCard report={r} onClick={()=>setSelected(r)}/><div className="cardactions"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><button type="button" onClick={()=>getMatches(r.id)}><Sparkles size={15}/> Gợi ý</button>{fullBackend&&r.status==='EXPIRED'&&<button onClick={()=>request(async()=>{await api(`/operations/reports/${r.id}/renew`,{method:'PATCH'});notify('Đã gia hạn bài thêm 30 ngày.');await refresh()})}>Gia hạn</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>editPost(r)}><Eye size={14}/> Sửa</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>request(async()=>{await api(`/reports/${r.id}/close`,{method:'PATCH'});notify('Đã đóng bài');await refresh()})}><X size={14}/> Đóng bài</button>}{!fullBackend&&r.status==='OPEN'&&<button type="button" onClick={()=>request(async()=>{if(!window.confirm('Xác nhận vật phẩm đã được hoàn trả?'))return;await api(`/reports/${r.id}/status`,{method:'PATCH'});await refresh();notify('Đã đánh dấu hoàn trả')})}><CheckCheck size={15}/> Đã hoàn trả</button>}</div></div>)}</div>{mine.length===0&&<Empty icon={<PackageOpen/>} title="Chưa có bài đăng nào" detail="Đăng thông tin về đồ bạn mất hoặc nhặt được."/>}</section>}
+    {page==='mine'&&<section className="container privatepage"><PageHeader kicker="KHÔNG GIAN CỦA BẠN" title="Bài đăng của tôi" subtitle="Theo dõi bài đăng và gợi ý phù hợp; liên hệ hỗ trợ khi có hồ sơ hợp lệ." action={<button className="btn primary" onClick={()=>openPost('LOST')}><Plus size={16}/> Đăng bài mới</button>}/><div className="cardgrid">{mine.map(r=><div key={r.id} className="mycard"><ReportCard report={r} onClick={()=>setSelected(r)}/><div className="cardactions"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><button type="button" onClick={()=>getMatches(r.id)}><Sparkles size={15}/> Gợi ý</button>{fullBackend&&r.status==='EXPIRED'&&<button onClick={()=>request(async()=>{await api(`/operations/reports/${r.id}/renew`,{method:'PATCH'});notify('Đã gia hạn bài thêm 30 ngày.');await refresh()})}>Gia hạn</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>editPost(r)}><Eye size={14}/> Sửa</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>request(async()=>{await api(`/reports/${r.id}/close`,{method:'PATCH'});notify('Đã đóng bài');await refresh()})}><X size={14}/> Đóng bài</button>}{!fullBackend&&r.status==='OPEN'&&<button type="button" onClick={()=>request(async()=>{if(!window.confirm('Xác nhận vật phẩm đã được hoàn trả?'))return;await api(`/reports/${r.id}/status`,{method:'PATCH'});await refresh();notify('Đã đánh dấu hoàn trả')})}><CheckCheck size={15}/> Đã hoàn trả</button>}</div></div>)}</div>{mine.length===0&&<Empty icon={<PackageOpen/>} title="Chưa có bài đăng nào" detail="Đăng thông tin về đồ bạn mất hoặc nhặt được."/>}</section>}
     {page==='matching'&&<MatchingPanel mine={mine} selectedId={selectedMine} matches={matches} loading={matchingLoading} onSelect={getMatches} onOpen={setSelected} onExplore={(type)=>{setSearch('');setFilter(type==='LOST'?'FOUND':'LOST');goto('discover');}}/>}
     {page==='claims'&&<section className="container privatepage"><PageHeader kicker="XÁC MINH AN TOÀN" title="Yêu cầu nhận đồ" subtitle="Bằng chứng chỉ hiển thị cho người liên quan và quản trị viên."/><div className="sectionheading minor"><h3>Yêu cầu bạn đã gửi</h3></div><div className="listpanel">{myClaims.map(c=><ClaimRow key={c.id} c={c} onRoom={()=>{setSelectedClaimRoom(c.id);goto('handovers')}} onAct={action=>request(async()=>{if(action==='withdraw'){await api(`/claims/${c.id}/withdraw`,{method:'POST'});notify('Đã rút yêu cầu.');await refresh()}})}/>)}{myClaims.length===0&&<p className="muted padded">Bạn chưa gửi yêu cầu nhận đồ nào.</p>}</div><div className="sectionheading minor"><h3>Yêu cầu cần bạn xét duyệt</h3></div><div className="listpanel">{inbox.map(c=><ClaimRow key={c.id} c={c} inbox onRoom={()=>{setSelectedClaimRoom(c.id);goto('handovers')}} onAct={(action)=>request(async()=>{if(action==='revoke'){const reason=window.prompt('Lý do hủy chấp thuận (tối thiểu 10 ký tự):');if(!reason)return;await api(`/claims/${c.id}/revoke`,{method:'POST',body:JSON.stringify({reason})})}else{await api(`/claims/${c.id}/review`,{method:'PATCH',body:JSON.stringify({approve:action==='approve'})})}notify('Đã cập nhật yêu cầu');await refresh()})}/>)}{inbox.length===0&&<p className="muted padded">Chưa có yêu cầu cần xét duyệt.</p>}</div></section>}
     {page==='operations'&&me&&<OperationsHub mine={mine} notify={notify} onRefresh={refresh}/>}
-    {page==='handovers'&&me&&<HandoverHub user={me} selectedClaimId={selectedClaimRoom} notify={notify} onRefresh={async()=>{await Promise.all([loadNotifs(),loadClaims(),loadMine()])}}/>}
+    {page==='handovers'&&me&&<HandoverHub user={me} selectedClaimId={selectedClaimRoom} notify={notify} onOpenSupport={()=>goto('contacts')} onRefresh={async()=>{await Promise.all([loadNotifs(),loadClaims(),loadMine()])}}/>}
     {page==='notifications'&&<section className="container privatepage"><PageHeader kicker="CẬP NHẬT DÀNH CHO BẠN" title="Thông báo" subtitle="Gợi ý ghép đồ và thay đổi trạng thái yêu cầu."/>
       <div className="notification-toolbar"><span>Chuông cập nhật tự động mỗi 12 giây.</span><button type="button" onClick={()=>request(loadNotifs)} disabled={busy}><RefreshCcw size={15}/> Làm mới thông báo</button></div>
-      <div className="listpanel">{notifications.map(n=><button key={n.id} className={'notirow '+(!n.isRead?'unread':'')} onClick={()=>request(async()=>{await api(`/notifications/${n.id}/read`,{method:'PATCH'});if(['HANDOVER','MESSAGE','APPOINTMENT','RETURNED','REMINDER'].includes(n.type)){setSelectedClaimRoom(null);goto('handovers')}else if(n.type==='CLAIM'){goto('claims')}else if(['CASE','DISPUTE','MODERATION','CUSTODY','EXPIRY'].includes(n.type)){goto('operations')}else if(n.reportId){const item=await api(`/reports/${n.reportId}`);setSelected(item)}await loadNotifs()})}><span className="notiicon"><Bell size={18}/></span><span><strong>{n.type==='MATCH'?'Gợi ý trùng khớp':n.type==='CLAIM'?'Yêu cầu nhận đồ':n.type==='MESSAGE'?'Tin nhắn bàn giao':n.type==='APPOINTMENT'?'Lịch bàn giao':n.type==='HANDOVER'?'Xác nhận bàn giao':n.type==='RETURNED'?'Đã trao trả':n.type==='CASE'?'Kết quả phản ánh':n.type==='DISPUTE'?'Tranh chấp':n.type==='MODERATION'?'Kiểm duyệt':n.type==='CUSTODY'?'Ký gửi tại quầy':n.type==='REMINDER'?'Sắp đến lịch hẹn':n.type==='EXPIRY'?'Bài hết hạn':'Thông báo'}</strong><small>{n.content}</small><em>{time(n.createdAt)}</em></span>{!n.isRead&&<i className="newdot"/>}</button>)}{notifications.length===0&&<p className="muted padded">Chưa có thông báo.</p>}</div></section>}
+      <div className="listpanel">{notifications.map(n=><button key={n.id} className={'notirow '+(!n.isRead?'unread':'')} onClick={()=>request(async()=>{await api(`/notifications/${n.id}/read`,{method:'PATCH'});if(['HANDOVER','MESSAGE','APPOINTMENT','RETURNED','REMINDER'].includes(n.type)){setSelectedClaimRoom(null);goto('handovers')}else if(n.type==='SUPPORT'){goto('contacts')}else if(n.type==='CLAIM'){goto('claims')}else if(['CASE','DISPUTE','MODERATION','CUSTODY','EXPIRY'].includes(n.type)){goto('operations')}else if(n.reportId){const item=await api(`/reports/${n.reportId}`);setSelected(item)}await loadNotifs()})}><span className="notiicon"><Bell size={18}/></span><span><strong>{n.type==='MATCH'?'Gợi ý trùng khớp':n.type==='CLAIM'?'Yêu cầu nhận đồ':n.type==='MESSAGE'?'Tin nhắn bàn giao':n.type==='APPOINTMENT'?'Lịch bàn giao':n.type==='HANDOVER'?'Xác nhận bàn giao':n.type==='RETURNED'?'Đã trao trả':n.type==='CASE'?'Kết quả phản ánh':n.type==='DISPUTE'?'Tranh chấp':n.type==='SUPPORT'?'Phản hồi hỗ trợ':n.type==='MODERATION'?'Kiểm duyệt':n.type==='CUSTODY'?'Ký gửi tại quầy':n.type==='REMINDER'?'Sắp đến lịch hẹn':n.type==='EXPIRY'?'Bài hết hạn':'Thông báo'}</strong><small>{n.content}</small><em>{time(n.createdAt)}</em></span>{!n.isRead&&<i className="newdot"/>}</button>)}{notifications.length===0&&<p className="muted padded">Chưa có thông báo.</p>}</div></section>}
     </main>
     <footer><div className="container footerinner"><div className="footerbrand"><span className="brandmark"><PackageOpen size={18}/></span><div><strong>foundly</strong><small>Dự án quản lý đồ thất lạc tại trường đại học</small></div></div><p>Made for campus communities · Phiên bản demo chạy localhost · {fullBackend?<span>Quản trị sử dụng giao diện riêng</span>:<span>Quản trị nâng cao đang phát triển</span>}</p><p>Bảo vệ quyền riêng tư • Xác minh trước khi bàn giao</p></div></footer>
     {showAuth&&<AuthModal initialMode={authInitialMode} onClose={()=>setShowAuth(false)} onSuccess={authDone} notify={notify} request={request}/>}
     {showPost&&<PostModal type={showPost} initial={editingReport} catalog={catalog} onClose={()=>{setShowPost(false);setEditingReport(null)}} notify={notify} request={request} onCreated={async(id,type)=>{setShowPost(false);setEditingReport(null);await refresh();setSearch('');await openMatches(id);}}/>}
-    {selected&&<DetailModal report={selected} me={me} request={request} notify={notify} onClose={()=>setSelected(null)} onAuth={()=>{setSelected(null);openAuth()}} refresh={refresh} fullBackend={fullBackend} onChat={()=>{setChatReport(selected);setSelected(null)}}/>}
-    {chatReport&&<Modal wide onClose={()=>setChatReport(null)}><ContactsScreen user={me} initialReport={chatReport} onClose={()=>setChatReport(null)}/></Modal>}
+    {selected&&<DetailModal report={selected} me={me} request={request} notify={notify} onClose={()=>setSelected(null)} onAuth={()=>{setSelected(null);openAuth()}} refresh={refresh} fullBackend={fullBackend}/>}
     {notice&&<div className={'toast ' +(notice.error?'error':'')}><span>{notice.error?'⚠':'✓'}</span> {notice.text}<button onClick={()=>setNotice(null)}><X size={15}/></button></div>}
     {busy&&<div className="loadingcorner"><LoaderCircle size={16} className="spin"/> Đang xử lý...</div>}
   </div>;
 }
 
-function HandoverHub({user,selectedClaimId,notify,onRefresh}) {
+function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   const [rooms,setRooms]=useState([]),[active,setActive]=useState(null),[room,setRoom]=useState(null),[messages,setMessages]=useState([]);
   const [text,setText]=useState(''),[place,setPlace]=useState('Quầy bảo vệ - Tòa A'),[when,setWhen]=useState('');
   const [ack,setAck]=useState(false),[pending,setPending]=useState(false),[loading,setLoading]=useState(true);
@@ -240,7 +235,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh}) {
             {room.pendingAppointment&&<div className="appointment-pending"><strong>Đề xuất đang chờ phản hồi</strong><span>{room.pendingAppointment.place} · {time(room.pendingAppointment.meetingAt)}</span>{room.pendingAppointment.proposedById!==user.id?<div className="room-actions"><button className="btn primary" disabled={pending} onClick={()=>respond(true)}><Check size={15}/> Đồng ý</button><button className="btn outline" disabled={pending} onClick={()=>respond(false)}><X size={15}/> Từ chối</button></div>:<small>Đang chờ đối phương đồng ý.</small>}</div>}
             {!complete&&room.status!=='DISPUTED'&&room.status!=='CANCELLED'&&!room.holderConfirmedAt&&!room.claimantConfirmedAt&&<form className="appointment-form" onSubmit={propose}><label>Địa điểm nhận đồ<select required value={place} onChange={e=>setPlace(e.target.value)}>{room.safePlaces.map(x=><option key={x} value={x}>{x}</option>)}</select></label><label>Ngày, giờ đề xuất<input required type="datetime-local" value={when} onChange={e=>setWhen(e.target.value)}/></label><button className="btn outline" disabled={pending||!when} type="submit"><CalendarDays size={16}/> Đề xuất lịch {room.acceptedAppointment?'mới':''}</button></form>}
           </div>
-          <RoomIssueForm room={room} notify={notify} onDone={()=>loadActive(active)} />
+          <RoomIssueForm room={room} notify={notify} onDone={()=>loadActive(active)} onOpenSupport={onOpenSupport} />
           <div className="handover-confirm"><h3><CheckCheck size={19}/> Xác nhận bàn giao</h3><p>Chỉ xác nhận <strong>sau khi đã trực tiếp giao hoặc nhận món đồ</strong> tại địa điểm đã hẹn. Không nhấn trước khi gặp.</p><div className="confirm-grid"><div><strong>Người nhặt: {room.holder.fullName}</strong><small>{room.holderConfirmedAt?'✓ Đã xác nhận':'Đang chờ xác nhận'}</small></div><div><strong>Người mất: {room.claimant.fullName}</strong><small>{room.claimantConfirmedAt?'✓ Đã xác nhận':'Đang chờ xác nhận'}</small></div></div>
             {!complete&&room.status!=='DISPUTED'&&room.status!=='CANCELLED'&&!confirmedSelf&&room.acceptedAppointment&&<><label className="confirm-check"><input type="checkbox" checked={ack} onChange={e=>setAck(e.target.checked)}/> Tôi xác nhận mình đã {room.myRole==='HOLDER'?'trực tiếp giao':'thực sự nhận'} đúng vật phẩm.</label><button className="btn primary" disabled={!ack||pending} onClick={confirm}><CheckCheck size={17}/> Xác nhận {room.myRole==='HOLDER'?'đã giao đồ':'đã nhận đồ'}</button></>}
             {!room.acceptedAppointment&&!complete&&<p className="handover-muted">Cần có lịch được cả hai chấp thuận trước khi xác nhận bàn giao.</p>}
@@ -254,20 +249,20 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh}) {
 
 function ReportFlag({reportId,request,notify}){
  const [open,setOpen]=useState(false),[reason,setReason]=useState('');
- const submit=e=>{e.preventDefault();request(async()=>{await api('/operations/cases',{method:'POST',body:JSON.stringify({type:'REPORT_ABUSE',reportId,reason})});notify('Đã gửi báo cáo tới quản trị viên.');setReason('');setOpen(false)})};
+ const submit=e=>{e.preventDefault();request(async()=>{await api('/operations/cases',{method:'POST',body:JSON.stringify({type:'REPORT_ABUSE',reportId,reason})});notify('Đã gửi báo cáo. Mở Hỗ trợ & Danh bạ để theo dõi và nhắn cho Admin.');setReason('');setOpen(false)})};
  return <div className="ops-inline"><button className="btn outline small" onClick={()=>setOpen(!open)}>Báo cáo bài đăng vi phạm</button>{open&&<form onSubmit={submit} className="ops-form"><label>Mô tả nội dung vi phạm<textarea minLength={15} maxLength={2000} required value={reason} onChange={e=>setReason(e.target.value)}/></label><button className="btn primary small" type="submit">Gửi báo cáo</button></form>}</div>
 }
-function RoomIssueForm({room,notify,onDone}){
+function RoomIssueForm({room,notify,onDone,onOpenSupport}){
  const [kind,setKind]=useState('HANDOVER_DISPUTE'),[reason,setReason]=useState(''),[working,setWorking]=useState(false);
  if(['COMPLETED','CANCELLED'].includes(room.status))return null;
- const submit=async e=>{e.preventDefault();setWorking(true);try{await api('/operations/cases',{method:'POST',body:JSON.stringify({type:kind,roomId:room.id,reason})});notify('Đã chuyển phòng sang chờ Admin giải quyết.');setReason('');await onDone()}catch(e){notify(e.message,true)}finally{setWorking(false)}};
- return <div className="ops-panel"><h3>Báo vắng mặt / tranh chấp</h3><p>Nếu đối phương không đến đúng lịch hoặc có sự cố, gửi báo cáo để Admin xem xét. Phòng sẽ tạm khóa thao tác bàn giao.</p><form className="ops-form" onSubmit={submit}><label>Loại sự cố<select value={kind} onChange={e=>setKind(e.target.value)}><option value="HANDOVER_DISPUTE">Tranh chấp bàn giao</option><option value="NO_SHOW">Một bên không đến điểm hẹn</option></select></label><label>Chi tiết<textarea required minLength={15} maxLength={2000} value={reason} onChange={e=>setReason(e.target.value)}/></label><button className="btn outline" disabled={working||room.status==='DISPUTED'} type="submit">Gửi yêu cầu hỗ trợ Admin</button>{room.status==='DISPUTED'&&<small>Đang chờ quản trị viên xử lý.</small>}</form></div>
+ const submit=async e=>{e.preventDefault();setWorking(true);try{await api('/operations/cases',{method:'POST',body:JSON.stringify({type:kind,roomId:room.id,reason})});notify('Đã gửi báo cáo. Bạn có thể trao đổi tiếp với Admin trong Hỗ trợ & Danh bạ.');setReason('');await onDone();onOpenSupport?.()}catch(e){notify(e.message,true)}finally{setWorking(false)}};
+ return <div className="ops-panel"><h3>Báo vắng mặt / tranh chấp</h3><p>Nếu đối phương không đến đúng lịch hoặc có sự cố, gửi báo cáo để Admin xem xét. Phòng sẽ tạm khóa thao tác bàn giao.</p><form className="ops-form" onSubmit={submit}><label>Loại sự cố<select value={kind} onChange={e=>setKind(e.target.value)}><option value="HANDOVER_DISPUTE">Tranh chấp bàn giao</option><option value="NO_SHOW">Một bên không đến điểm hẹn</option></select></label><label>Chi tiết<textarea required minLength={15} maxLength={2000} value={reason} onChange={e=>setReason(e.target.value)}/></label><button className="btn outline" disabled={working||room.status==='DISPUTED'} type="submit">Gửi yêu cầu hỗ trợ Admin</button>{room.status==='DISPUTED'&&<small>Đang chờ quản trị viên xử lý. <button type="button" className="btn outline small" onClick={onOpenSupport}>Mở hộp thư hỗ trợ</button></small>}</form></div>
 }
 function OperationsHub({mine,notify,onRefresh}){
  const [cases,setCases]=useState([]),[custody,setCustody]=useState([]),[desks,setDesks]=useState([]),[reportId,setReportId]=useState(''),[desk,setDesk]=useState(''),[loading,setLoading]=useState(true);
  const refresh=async()=>{const [a,b,c]=await Promise.all([api('/operations/cases/mine'),api('/operations/custody/mine'),api('/operations/custody/desks')]);setCases(a);setCustody(b);setDesks(c);setDesk(d=>d||c[0]||'');setLoading(false)};
  useEffect(()=>{refresh().catch(e=>{notify(e.message,true);setLoading(false)})},[]);
- const request=e=>{e.preventDefault();api(`/operations/custody/${reportId}`,{method:'POST',body:JSON.stringify({desk})}).then(async x=>{notify(x.message);await refresh()}).catch(e=>notify(e.message,true))};
+ const request=e=>{e.preventDefault();api(`/operations/custody/${reportId}`,{method:'POST',body:JSON.stringify({desk})}).then(async x=>{notify(x.message+' Mở Hỗ trợ & Danh bạ để liên hệ quầy qua Admin.');await refresh()}).catch(e=>notify(e.message,true))};
  return <section className="container privatepage"><PageHeader kicker="QUẢN LÝ NGOẠI LỆ" title="Hỗ trợ & ký gửi" subtitle="Tra cứu kết quả báo cáo, gia hạn bài đăng và gửi vật phẩm nhặt được vào quầy bảo vệ."/>
   <div className="ops-columns"><div className="ops-panel"><h3>Yêu cầu ký gửi đồ nhặt được</h3><p>Chọn bài FOUND và quầy tiếp nhận. Nhân viên Admin xác nhận ký gửi bằng mã biên nhận; không tự động coi đồ đã giao nếu chưa tiếp nhận thực tế.</p><form className="ops-form" onSubmit={request}><label>Bài nhặt được<select required value={reportId} onChange={e=>setReportId(e.target.value)}><option value="">Chọn bài nhặt được</option>{mine.filter(r=>r.type==='FOUND'&&r.status==='OPEN').map(r=><option value={r.id} key={r.id}>{r.itemName}</option>)}</select></label><label>Quầy bảo vệ<select required value={desk} onChange={e=>setDesk(e.target.value)}>{desks.map(d=><option key={d}>{d}</option>)}</select></label><button type="submit" className="btn primary" disabled={!reportId}>Gửi yêu cầu ký gửi</button></form></div>
   <div className="ops-panel"><h3>Hồ sơ ký gửi</h3>{custody.map(c=><p key={c.id}><strong>{mine.find(x=>x.id===c.reportId)?.itemName||'Đồ nhặt được'}</strong> · {c.desk}<br/><small>Trạng thái: {c.status}{c.receivedAt?' · đã tiếp nhận '+time(c.receivedAt):''}</small></p>)}{!custody.length&&<p>Chưa có hồ sơ nào.</p>}</div></div>
@@ -279,21 +274,69 @@ function PageHeader({kicker,title,subtitle,action}){return <div className="pageh
 function ReportCard({report:r,onClick}){const cover=r.images?.[0];const returned=r.status==='RETURNED';return <button className={'reportcard '+(returned?'returned-card':'')} onClick={onClick}><div className={'cardphoto '+(isFound(r.type)?'aqua':'sand')}>{cover?<img src={cover} alt={r.itemName} loading="lazy"/>:<div className="itememoji">{r.category==='Điện tử'?'📱':r.category==='Giấy tờ'?'🪪':r.category==='Ví & túi'?'👛':r.category==='Chìa khóa'?'🔑':'🎒'}</div>}<span className={'reportbadge '+(returned?'returned':(isFound(r.type)?'found':'lost'))}>{returned?'ĐÃ TRẢ':isFound(r.type)?'ĐÃ NHẶT ĐƯỢC':'ĐANG TÌM'}</span></div><div className="cardbody"><div className="cardmeta"><span>{r.category||'Vật dụng khác'}</span><span>·</span><span>{time(r.createdAt).split(',')[0]}</span></div><h3>{r.itemName}</h3><p>{r.description||'Chưa có mô tả bổ sung.'}</p><div className="cardbottom"><span><MapPin size={15}/> {r.location||r.locationDetail||'Chưa rõ khu vực'}</span><ArrowUpRight size={17}/></div></div></button>}
 function Empty({icon,title,detail}){return <div className="emptystate"><span>{icon}</span><h3>{title}</h3><p>{detail}</p></div>}
 function Modal({children,onClose,wide}){useEffect(()=>{const f=e=>{if(e.key==='Escape')onClose()};document.addEventListener('keydown',f);document.body.style.overflow='hidden';return()=>{document.removeEventListener('keydown',f);document.body.style.overflow=''}},[onClose]);return <div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className={'modal '+(wide?'wide':'')}><button className="modalclose" onClick={onClose}><X size={19}/></button>{children}</div></div>}
+// Google's browser SDK only provides an ID token. The backend validates it with Google.
+function GoogleSignIn({onSuccess,request}){
+ const clientId=import.meta.env.VITE_GOOGLE_CLIENT_ID;
+ const mount=useRef(null);
+ const callbackRef=useRef(null);
+ callbackRef.current=(credential)=>request(async()=>{
+   const result=await api('/auth/google',{method:'POST',body:JSON.stringify({credential})});
+   onSuccess(result.user);
+ });
+ useEffect(()=>{
+   if(!clientId)return;
+   let disposed=false;
+   const load=()=>{
+     if(disposed||!mount.current||!window.google?.accounts?.id)return;
+     window.google.accounts.id.initialize({client_id:clientId,callback:({credential})=>{
+       if(!disposed&&credential)callbackRef.current?.(credential);
+     }});
+     mount.current.replaceChildren();
+     window.google.accounts.id.renderButton(mount.current,{theme:'outline',size:'large',text:'continue_with',width:290});
+   };
+   let script=document.getElementById('foundly-google-identity');
+   if(!script){
+     script=document.createElement('script');script.id='foundly-google-identity';
+     script.src='https://accounts.google.com/gsi/client';script.async=true;script.defer=true;
+     document.head.appendChild(script);
+   }
+   script.addEventListener('load',load);
+   if(window.google?.accounts?.id)load();
+   return()=>{disposed=true;script.removeEventListener('load',load)};
+ },[clientId]);
+ if(!clientId)return null;
+ return <div className="school-google-login"><div ref={mount} aria-label="Đăng nhập bằng Google"/><p>Chỉ chấp nhận Google có email trường đã xác minh.</p></div>;
+}
 function AuthModal({initialMode='login',onClose,onSuccess,notify,request}){
  const [mode,setMode]=useState(initialMode),[email,setEmail]=useState(''),[password,setPassword]=useState(''),[fullName,setFullName]=useState(''),[code,setCode]=useState('');
  const submit=e=>{e.preventDefault();request(async()=>{
    if(mode==='login'){const data=await api('/auth/login',{method:'POST',body:JSON.stringify({email,password})});onSuccess(data.user)}
-   if(mode==='register'){const data=await api('/auth/register',{method:'POST',body:JSON.stringify({email,password,fullName})});setCode(data.devVerificationCode||'');setMode('verify');notify('Đã tạo tài khoản. Hãy xác minh email.');}
-   if(mode==='verify'){await api('/auth/verify',{method:'POST',body:JSON.stringify({email,code})});notify('Xác minh thành công!');setMode('login');}
+   if(mode==='register'){
+     const data=await api('/auth/register',{method:'POST',body:JSON.stringify({email,password,fullName})});
+     setCode(data.devVerificationCode||'');setMode('verify');notify(data.message);
+   }
+   if(mode==='verify'){
+     await api('/auth/verify',{method:'POST',body:JSON.stringify({email,code})});
+     notify('Xác minh thành công!');setCode('');setMode('login');
+   }
  })};
- return <Modal onClose={onClose}><div className="modalhead"><span className="modalsymbol"><ShieldCheck size={22}/></span><span className="kicker">FOUNDLY · KẾT NỐI CỘNG ĐỒNG</span><h2>{mode==='login'?'Đăng nhập vào Foundly':mode==='register'?'Tạo tài khoản Foundly':'Xác minh email'}</h2><p>{mode==='verify'?'Nhập mã xác minh để hoàn tất đăng ký. Trong localhost, mã thử nghiệm được hiển thị bên dưới.':mode==='register'?'Tham gia cộng đồng để báo mất, đăng tin nhặt được và trao đổi an toàn.':'Đăng nhập để đăng tin, tìm kiếm và liên hệ về đồ thất lạc trong trường.'}</p></div><form onSubmit={submit} className="form">
+ const resend=()=>request(async()=>{
+   const data=await api('/auth/resend',{method:'POST',body:JSON.stringify({email})});
+   setCode(data.devVerificationCode||'');notify(data.message);
+ });
+ return <Modal onClose={onClose}><div className="modalhead"><span className="modalsymbol"><ShieldCheck size={22}/></span><span className="kicker">FOUNDLY · TÀI KHOẢN TRƯỜNG</span><h2>{mode==='login'?'Đăng nhập vào Foundly':mode==='register'?'Tạo tài khoản Foundly':'Xác minh email trường'}</h2><p>{mode==='verify'?'Nhập mã OTP 6 chữ số đã gửi đến email. Mã có hiệu lực 10 phút.':mode==='register'?'Đăng ký bằng email được trường cấp để kết nối và tìm đồ thất lạc.':'Sử dụng email sinh viên hoặc giảng viên của trường.'}</p></div>
+ <form onSubmit={submit} className="form">
  {mode==='register'&&<label>Họ và tên<input required minLength={2} maxLength={120} value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Nguyễn Văn A"/></label>}
- <label>Email{mode==='login'?'':' của bạn'}<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="sinhvien@campus.edu" readOnly={mode==='verify'}/></label>
- {mode==='verify'?<label>Mã xác minh<input value={code} onChange={e=>setCode(e.target.value)} required pattern="[0-9]{6}" maxLength={6}/><small>Chế độ Development: mã do API trả về khi đăng ký. Hệ thống chưa gửi email thật.</small></label>:<label>Mật khẩu<input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='register'?10:1} placeholder="••••••••••"/></label>}
- <button className="btn primary submit" type="submit">{mode==='login'?'Đăng nhập':mode==='register'?'Tạo tài khoản':'Xác minh'} <ArrowRight size={17}/></button>
- </form>{mode!=='verify'&&<p className="modalswitch">{mode==='login'?'Chưa có tài khoản?':'Đã có tài khoản?'} <button onClick={()=>setMode(mode==='login'?'register':'login')}>{mode==='login'?'Đăng ký ngay':'Đăng nhập'}</button></p>}
- </Modal>
+ <label>Email trường<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ten@st.cmcu.edu.vn" readOnly={mode==='verify'}/><small>Sinh viên: @st.cmcu.edu.vn · Giảng viên: @cmcu.edu.vn</small></label>
+ {mode==='verify'?<label>Mã OTP<input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}/></label>:<label>Mật khẩu<input type="password" autoComplete={mode==='register'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='register'?10:1} placeholder="••••••••••"/></label>}
+ <button className="btn primary submit" type="submit">{mode==='login'?'Đăng nhập':mode==='register'?'Đăng ký và gửi OTP':'Xác minh OTP'} <ArrowRight size={17}/></button>
+ </form>
+ {mode==='verify'&&<p className="modalswitch">Chưa nhận được mã? <button type="button" onClick={resend}>Gửi lại OTP</button></p>}
+ {mode==='login'&&<GoogleSignIn request={request} onSuccess={onSuccess}/>}
+ {mode!=='verify'&&<p className="modalswitch">{mode==='login'?'Chưa có tài khoản?':'Đã có tài khoản?'} <button type="button" onClick={()=>setMode(mode==='login'?'register':'login')}>{mode==='login'?'Đăng ký ngay':'Đăng nhập'}</button></p>}
+ </Modal>;
 }
+
 function PostModal({type,initial,catalog,onClose,notify,request,onCreated}){
  const [form,setForm]=useState(initial?{...emptyReport(),...initial,categoryId:initial.categoryId??'',locationId:initial.locationId??'',privateIdentifier:'',eventTime:new Date(new Date(initial.eventTime).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)}:{...emptyReport(),type}),[images,setImages]=useState([]);
  const update=(key,value)=>setForm(x=>({...x,[key]:value}));
@@ -318,23 +361,18 @@ function PostModal({type,initial,catalog,onClose,notify,request,onCreated}){
  <div className="full formfoot"><p><LockKeyhole size={16}/> Không công khai email hoặc thông tin xác minh riêng tư.</p><button type="submit" className="btn primary lg"><Plus size={17}/> {initial?'Lưu chỉnh sửa':'Đăng tin ngay'}</button></div>
  </form></Modal>
 }
-function DetailModal({report:r,me,onClose,onAuth,onChat,request,notify,refresh,fullBackend}){
+function DetailModal({report:r,me,onClose,onAuth,request,notify,refresh,fullBackend}){
  const [evidence,setEvidence]=useState(''),[sending,setSending]=useState(false);
  const submit=e=>{e.preventDefault();request(async()=>{setSending(true);try{await api('/claims',{method:'POST',body:JSON.stringify({foundReportId:r.id,evidence})});notify('Đã gửi yêu cầu xác minh.');await refresh();onClose();}finally{setSending(false)}})};
  return <Modal wide onClose={onClose}><div className="detailgrid"><div className="detailvisual">{r.images?.length?<img src={r.images[0]} alt={r.itemName}/>:<div className="detailplaceholder">{isFound(r.type)?'📦':'🎒'}</div>}</div><div className="detailbody"><span className={'reportbadge inline '+(r.status==='RETURNED'?'returned':(isFound(r.type)?'found':'lost'))}>{r.status==='RETURNED'?'ĐÃ TRẢ':isFound(r.type)?'ĐÃ NHẶT ĐƯỢC':'ĐANG TÌM'}</span><h2>{r.itemName}</h2><div className="detailfacts"><span><MapPin size={16}/> {r.location||r.locationDetail||'Chưa rõ địa điểm'}</span><span><CalendarDays size={16}/> {time(r.eventTime)}</span><span><PackageOpen size={16}/> {r.category||'Nhóm khác'}</span></div><h4>Mô tả</h4><p className="description">{r.description||'Người đăng chưa bổ sung mô tả.'}</p>{(r.color||r.brand)&&<div className="attributes">{r.color&&<span>Màu: <strong>{r.color}</strong></span>}{r.brand&&<span>Hãng: <strong>{r.brand}</strong></span>}</div>}
  <div className="privacycallout"><ShieldCheck size={21}/><p>{fullBackend?'Bằng chứng nhận đồ sẽ chỉ hiển thị cho người giữ đồ và quản trị viên. Điểm gợi ý không thay thế bước xác minh.':'Bạn có thể trao đổi riêng qua Hộp thư Sprint 2. Yêu cầu xác minh và bàn giao nâng cao đang chờ backend.'}</p></div>
- {me&&me.id!==r.userId&&r.status==='OPEN'&&<button type="button" className="btn primary" onClick={onChat}><MessageCircle size={16}/> Liên hệ người đăng qua hộp thư</button>}
+
  {!me&&<button type="button" className="btn outline" onClick={onAuth}>Đăng nhập để liên hệ</button>}
+ {fullBackend&&isFound(r.type)&&r.status==='OPEN'&&me?.id!==r.userId&&<p className="handover-muted">Để bảo vệ người nhặt được đồ, bạn cần gửi bằng chứng xác minh bên dưới. Chỉ sau khi yêu cầu được chấp thuận, hai bên mới trao đổi qua Phòng bàn giao.</p>}
  {fullBackend&&me&&<ReportFlag reportId={r.id} request={request} notify={notify}/>}
  {fullBackend&&isFound(r.type)&&r.status==='OPEN'&&me?.id!==r.userId&&(me?<form className="claimbox" onSubmit={submit}><h4>Đây có thể là đồ của bạn?</h4><p>Hãy mô tả đặc điểm bí mật, phụ kiện, vị trí hoặc bằng chứng sở hữu mà bài công khai chưa nêu.</p><textarea required minLength={12} maxLength={4000} rows={3} value={evidence} onChange={e=>setEvidence(e.target.value)} placeholder="Ví dụ: đặc điểm riêng, phụ kiện, ảnh/hóa đơn đã có... (không gửi mật khẩu hoặc OTP)"/><button className="btn primary" type="submit" disabled={sending}><ShieldCheck size={16}/> Gửi yêu cầu xác minh</button></form>:<button className="btn primary" onClick={onAuth}>Đăng nhập để nhận đồ</button>)}
  </div></div></Modal>
 }
 function ClaimRow({c,inbox,onAct,onRoom}){return <div className="claimrow"><div className="claimicon"><ShieldCheck size={22}/></div><div className="claimcontent"><div className="claimtitle"><strong>{c.reportName||'Đồ nhặt được'}</strong><span className={'status '+c.status.toLowerCase()}>{c.status}</span></div><p><strong>Bằng chứng riêng:</strong> {c.evidence}</p><small>{time(c.createdAt)} {c.handedOverAt?' · Đã nhận lại':''}</small></div>{inbox&&c.status==='PENDING'&&<div className="rowbuttons"><button className="btn small primary" onClick={()=>onAct('approve')}><Check size={14}/> Duyệt</button><button className="btn small outline" onClick={()=>onAct('reject')}><X size={14}/> Từ chối</button></div>}{c.status==='APPROVED'&&!c.handedOverAt&&<button className="btn small primary" onClick={onRoom}><MessagesSquare size={15}/> Mở phòng bàn giao</button>}{!inbox&&['PENDING','APPROVED'].includes(c.status)&&<button className="btn small outline" onClick={()=>onAct('withdraw')}>Rút yêu cầu</button>}{inbox&&c.status==='APPROVED'&&!c.handedOverAt&&<button className="btn small outline" onClick={()=>onAct('revoke')}>Hủy chấp thuận</button>}{c.handedOverAt&&<span className="status returned">Đã hoàn tất</span>}</div>}
-
-// Preserve the verified #15 live API adapter and #14 presentation inside the Pro layout.
-function ContactsScreen({user, initialReport=null, onClose=null}) {
-  const chat = useChatLogic({user,initialReport});
-  return <Sprint2ContactsView initialReport={initialReport} onClose={onClose} live={chat}/>;
-}
 
 createRoot(document.getElementById('root')).render(<App/>);

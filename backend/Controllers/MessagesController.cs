@@ -23,7 +23,7 @@ public class MessagesController(LostFoundDb db) : ControllerBase
     {
         if (contactId == Guid.Empty) return BadRequest(new { message = "Thiếu contactId." });
         var uid = UserId;
-        var allowed = await db.Contacts.AnyAsync(c => c.Id == contactId && (c.OwnerId == uid || c.VisitorId == uid));
+        var allowed = await db.Contacts.AnyAsync(c => c.Id == contactId && (c.OwnerId == uid || c.VisitorId == uid) && c.Report != null && c.Report.Type == "LOST");
         if (!allowed) return NotFound(); // Don't reveal other people's conversations.
         page = Math.Clamp(page, 1, 10000);
         pageSize = Math.Clamp(pageSize, 1, 50);
@@ -36,31 +36,8 @@ public class MessagesController(LostFoundDb db) : ControllerBase
         return Ok(new { contactId, page, pageSize, total, items = recent.Select(SafeMessage) });
     }
 
+    // Legacy archive is read-only. No direct message bypasses Claims or official support.
     [HttpPost]
-    public async Task<IActionResult> Send(SendChatMessageRequest req)
-    {
-        var uid = UserId;
-        var content = req.Content?.Trim() ?? "";
-        if (content.Length is < 1 or > 1500)
-            return BadRequest(new { message = "Nội dung tin nhắn phải dài 1–1500 ký tự." });
-        var contact = await db.Contacts.Include(c => c.Report)
-            .FirstOrDefaultAsync(c => c.Id == req.ContactId && (c.OwnerId == uid || c.VisitorId == uid));
-        if (contact is null) return NotFound();
-        if (contact.Report?.Status != "OPEN")
-            return Conflict(new { message = "Bài đăng đã đóng; cuộc trò chuyện chỉ cho phép đọc." });
-        var sentRecently = await db.Messages.CountAsync(m => m.SenderId == uid && m.CreatedAt >= DateTime.UtcNow.AddMinutes(-1));
-        if (sentRecently >= 15)
-            return StatusCode(429, new { message = "Bạn gửi tin nhắn quá nhanh, hãy thử lại sau." });
-
-        var message = new ChatMessage
-        {
-            ContactId = contact.Id, ReportId = contact.ReportId, SenderId = uid,
-            RecipientId = uid == contact.OwnerId ? contact.VisitorId : contact.OwnerId,
-            Content = content, CreatedAt = DateTime.UtcNow
-        };
-        contact.LastMessageAt = message.CreatedAt;
-        db.Messages.Add(message);
-        await db.SaveChangesAsync();
-        return Created($"/api/messages?contactId={contact.Id}", SafeMessage(message));
-    }
+    public IActionResult Send(SendChatMessageRequest _) => StatusCode(410,
+        new { message = "Hộp thư người dùng cũ chỉ để lưu trữ. Hãy dùng Phòng bàn giao hoặc Hỗ trợ & Danh bạ." });
 }

@@ -1,3 +1,4 @@
+# Legacy P2P integration test, retained as historical archive. Deprecated by official support inbox.
 """Issue #13 integration smoke test. Requires running localhost API + development demo users.
 Usage: python tests/issue13_contacts_api.py
 Optional environment variable: FOUNDLY_API_URL.

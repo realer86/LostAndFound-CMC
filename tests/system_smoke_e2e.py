@@ -1,6 +1,6 @@
 """End-to-end API/system integration test against RUNNING Foundly API + PostgreSQL.
 Writes 2 test users, 2 test reports, 1 image, 1 contact and messages to the selected database.
-Dev-only; requires FOUNDLY_ALLOW_TEST_WRITES=1; never run against production.
+Dev-only; requires FOUNDLY_ALLOW_TEST_WRITES=1 and AUTH_ALLOW_DEV_CODE=true in Docker. Never run against production.
 
 Usage (development Docker running):
   set FOUNDLY_ALLOW_TEST_WRITES=1 && python tests/system_smoke_e2e.py
@@ -61,7 +61,7 @@ status,unauthorized=anon.call('GET','/api/reports/mine');check('Unauthorized acc
 status,dirs=anon.call('GET','/api/directory');check('Public institutional directory',status==200 and isinstance(dirs.get('items'),list))
 suffix=uuid.uuid4().hex[:12];password='SmokeSafe2026!'
 for idx,cli in enumerate([owner,visitor]):
- email=f'foundly-smoke-{suffix}-{idx}@example.edu'
+ email=f'foundly-smoke-{suffix}-{idx}@{"st.cmcu.edu.vn" if idx==0 else "cmcu.edu.vn"}'
  code,data=cli.call('POST','/api/auth/register',{'email':email,'fullName':f'Smoke Tester {idx}','password':password})
  check('Registration '+str(idx),code==200 and data.get('devVerificationCode'),str((code,data)))
  verify_code=data['devVerificationCode']
@@ -87,11 +87,9 @@ status,filtered=visitor.call('GET','/api/reports?'+urlencode({'q':suffix,'type':
 status,mine=owner.call('GET','/api/reports/mine');check('Owner list / my reports',status==200 and any(x['id']==found_id for x in mine))
 status,url=owner.image(found_id);check('Image upload on owned OPEN report',status==200 and url.get('url','').startswith('/uploads/'),str((status,url)))
 status,blocked=visitor.image(found_id);check('Non-owner upload forbidden',status==403)
-status,contact=visitor.call('POST','/api/contacts',{'reportId':found_id});check('Create contact',status==201,str((status,contact)))
-contact_id=contact['id'];status,again=visitor.call('POST','/api/contacts',{'reportId':found_id});check('Duplicate contacts reuse conversation',status==200 and again['id']==contact_id)
-status,msg=visitor.call('POST','/api/messages',{'contactId':contact_id,'content':'Smoke hello'});check('Send chat via API',status==201 and msg.get('content')=='Smoke hello')
-status,msgs=owner.call('GET','/api/messages?'+urlencode({'contactId':contact_id}));check('Owner can read chat',status==200 and any(x.get('content')=='Smoke hello' for x in msgs.get('items',[])))
-status,_=outsider.call('GET','/api/messages?'+urlencode({'contactId':contact_id}));check('Outsider cannot read chat',status in (401,404))
+status,blocked_contact=visitor.call('POST','/api/contacts',{'reportId':found_id});check('FOUND direct contact disabled',status==410,str((status,blocked_contact)))
+status,blocked_contact=visitor.call('POST','/api/contacts',{'reportId':lost_id});check('LOST direct contact disabled',status==410,str((status,blocked_contact)))
+status,support=visitor.call('GET','/api/support/threads');check('Support inbox accessible to authenticated user',status==200 and 'items' in support,str((status,support)))
 status,done=owner.call('PATCH','/api/reports/'+lost_id+'/status');check('Owner can mark returned',status==200 and done.get('status')=='RETURNED')
 status,_=visitor.call('PATCH','/api/reports/'+found_id+'/status');check('Non-owner cannot mark returned',status==403)
 status,exposed=anon.call('GET','/api/reports/'+lost_id);check('Returned report stays viewable',status==200 and exposed.get('status')=='RETURNED')
