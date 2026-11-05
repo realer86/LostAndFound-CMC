@@ -52,6 +52,7 @@ jobs:
           python tests/integrated_frontend_contract.py
           python tests/school_auth_contract.py
           python tests/admin_console_contract.py
+          python tests/docker_ports_contract.py
           python tests/matching_contract.py
           python tests/issue13_schema_contract.py
           python tests/issue14_ui_contract.py
