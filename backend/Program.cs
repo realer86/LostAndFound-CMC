@@ -94,7 +94,22 @@ builder.Services.AddRateLimiter(options =>
 });
 var app = builder.Build();
 
-// Giữ Origin guard của bản Final, thu gọn cho Web Sprint 1 trên localhost:5175.
+// Only allow localhost origins on the configured host ports. This must follow
+// Docker Compose host-port overrides; otherwise POST/PUT requests receive HTTP 403.
+// Reject invalid port configurations at startup instead of broadening the allowlist.
+int HostPort(string key, int fallback)
+{
+    var configured = builder.Configuration.GetValue<int>(key, fallback);
+    if (configured is < 1 or > 65535)
+        throw new InvalidOperationException($"Invalid port configured for {key}");
+    return configured;
+}
+var allowedLocalhostPorts = new HashSet<int>
+{
+    HostPort("AppPorts:Web", 5175),
+    HostPort("AppPorts:Admin", 5174),
+    HostPort("AppPorts:Api", 8081)
+};
 app.Use(async (context, next) =>
 {
     if (!HttpMethods.IsGet(context.Request.Method) &&
@@ -103,7 +118,7 @@ app.Use(async (context, next) =>
     {
         if (!Uri.TryCreate(origin.ToString(), UriKind.Absolute, out var uri) ||
             !(uri.Host == "localhost" || uri.Host == "127.0.0.1") ||
-            uri.Port is not (5175 or 5174 or 8081))
+            !allowedLocalhostPorts.Contains(uri.Port))
         {
             context.Response.StatusCode = 403;
             await context.Response.WriteAsJsonAsync(new { message = "Origin không được phép." });
