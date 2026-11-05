@@ -1,4 +1,4 @@
-name: foundly-sprint1
+name: foundly-project
 services:
   postgres:
     image: postgres:17-alpine
@@ -51,9 +51,17 @@ services:
     environment:
       API_PROXY_TARGET: http://api:8080
     ports:
-      - "127.0.0.1:5174:5174"
+      # Giữ cổng 5174 theo mặc định; chỉ đổi qua .env khi máy thực sự bị trùng cổng.
+      - "127.0.0.1:${FOUNDLY_ADMIN_PORT:-5174}:5174"
     depends_on:
       - api
+    healthcheck:
+      # Kiểm tra Vite đã phản hồi HTTP, không chỉ việc container đang Up.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5174/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
 volumes:
   foundly_sprint1_db:
   foundly_sprint1_uploads:
