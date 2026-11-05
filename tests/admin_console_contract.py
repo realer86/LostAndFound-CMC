@@ -4,7 +4,9 @@ R=Path(__file__).resolve().parents[1]
 def read(f):return (R/f).read_text(encoding='utf-8')
 def test_console():
     compose=read('compose.yaml')
-    assert 'admin:' in compose and '5174:5174' in compose
+    assert 'admin:' in compose and (
+    '127.0.0.1:5174:5174' in compose or
+    '127.0.0.1:${FOUNDLY_ADMIN_PORT:-5174}:5174' in compose)
     assert 'frontend:' not in compose or 'web:' in compose
     program=read('backend/Program.cs')
     assert 'AdminCookie' in program and '06_operations.sql' in program
