@@ -60,6 +60,32 @@ public class OperationsController(LostFoundDb db) : ControllerBase
         var ownedIds=await db.Reports.AsNoTracking().Where(x=>x.UserId==UserId).Select(x=>x.Id).ToListAsync();
         return Ok(await db.CustodyRecords.AsNoTracking().Where(x=>ownedIds.Contains(x.ReportId)).OrderByDescending(x=>x.CreatedAt).ToListAsync());
     }
+    
+    [HttpGet("custody/pickup")]
+    public async Task<IActionResult> PickupCustody()
+    {
+        var claims = await db.Claims.AsNoTracking().Where(x => x.ClaimantId == UserId && x.Status == "APPROVED").ToListAsync();
+        if (claims.Count == 0) return Ok(Array.Empty<object>());
+        var reportIds = claims.Select(x => x.FoundReportId).Distinct().ToList();
+        var claimIds = claims.Select(x => x.Id).ToList();
+        var records = await db.CustodyRecords.AsNoTracking().Where(x => reportIds.Contains(x.ReportId)).ToDictionaryAsync(x => x.ReportId);
+        var reports = await db.Reports.AsNoTracking().Where(x => reportIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id);
+        var rooms = await db.HandoverRooms.AsNoTracking().Where(x => claimIds.Contains(x.ClaimId)).ToDictionaryAsync(x => x.ClaimId);
+        var result = claims.Where(c => records.ContainsKey(c.FoundReportId)).Select(c =>
+        {
+            var rec = records[c.FoundReportId];
+            var rep = reports.GetValueOrDefault(c.FoundReportId);
+            var rm = rooms.GetValueOrDefault(c.Id);
+            return new
+            {
+                rec.Id, rec.ReportId, claimId = c.Id, roomId = rm?.Id,
+                itemName = rep?.ItemName ?? "Đồ nhặt được",
+                rec.Desk, rec.Status, rec.ReceivedAt, rec.ReleasedAt, rec.CreatedAt,
+                roomStatus = rm?.Status, claimantConfirmedAt = rm?.ClaimantConfirmedAt
+            };
+        }).OrderByDescending(x => x.CreatedAt).ToList();
+        return Ok(result);
+    }
     [HttpGet("custody/desks")]public IActionResult SafeDesks()=>Ok(Desks);
     [HttpPost("custody/{reportId:guid}")]
     public async Task<IActionResult> RequestCustody(Guid reportId,DeskRequest req)

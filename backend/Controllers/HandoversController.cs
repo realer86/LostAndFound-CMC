@@ -45,6 +45,7 @@ public class HandoversController(LostFoundDb db) : ControllerBase
             .Where(x => x.RoomId == room.Room.Id).OrderByDescending(x => x.CreatedAt).ToListAsync();
         var accepted = appointments.FirstOrDefault(x => x.Status == "ACCEPTED");
         var pending = appointments.FirstOrDefault(x => x.Status == "PROPOSED");
+        var custody = await db.CustodyRecords.AsNoTracking().FirstOrDefaultAsync(x => x.ReportId == room.Found.Id);
         return new {
             room.Room.Id, room.Room.ClaimId, room.Room.Status, room.Room.HolderConfirmedAt,
             room.Room.ClaimantConfirmedAt, room.Room.CompletedAt,
@@ -54,6 +55,7 @@ public class HandoversController(LostFoundDb db) : ControllerBase
             myRole = UserId == room.Found.UserId ? "HOLDER" : "CLAIMANT",
             acceptedAppointment = accepted is null ? null : new { accepted.Id,accepted.Place,accepted.MeetingAt,accepted.Status },
             pendingAppointment = pending is null ? null : new { pending.Id,pending.Place,pending.MeetingAt,pending.Status,pending.ProposedById },
+            custody = custody is null ? null : new { custody.Id, custody.Desk, custody.Status, custody.ReceivedAt, custody.ReleasedAt },
             safePlaces = SafePlaces
         };
     }

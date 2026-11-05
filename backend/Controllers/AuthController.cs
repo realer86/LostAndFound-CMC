@@ -17,8 +17,9 @@ public record RegisterRequest(string Email, string FullName, string Password);
 public record LoginRequest(string Email, string Password);
 public record VerifyRequest(string Email, string Code);
 public record ResendRequest(string Email);
+public record ForgotPasswordRequest(string Email);
+public record ResetPasswordRequest(string Email, string Code, string NewPassword);
 public record GoogleLoginRequest(string Credential);
-
 [ApiController, Route("api/auth")]
 public class AuthController(
     LostFoundDb db,
@@ -270,7 +271,71 @@ public class AuthController(
             return Ok(new { user = PublicUser(user) });
         }
     }
+[HttpPost("forgot-password"), EnableRateLimiting("auth")]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest req, CancellationToken cancellationToken)
+    {
+        var email = Normalize(req.Email);
+        if (!Allowed(email)) return BadSchoolEmail();
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
+        if (user is null)
+            return Ok(new { message = "Nếu tài khoản tồn tại, mã OTP đặt lại mật khẩu đã được gửi đến email trường." });
+        if (user.OtpSentAt.HasValue && user.OtpSentAt > DateTime.UtcNow.AddSeconds(-60))
+            return StatusCode(429, new { message = "Vui lòng chờ 60 giây trước khi yêu cầu OTP khác." });
 
+        var code = NewCode();
+        try { await sender.SendAsync(email, code, cancellationToken); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Password reset OTP delivery failed ({ErrorType})", ex.GetType().Name);
+            return StatusCode(503, new { message = "Chưa gửi được OTP. Kiểm tra cấu hình SMTP hoặc thử lại sau." });
+        }
+        user.VerifyTokenHash = passwords.HashPassword(user, code);
+        user.VerifyExpiresAt = DateTime.UtcNow.AddMinutes(10);
+        user.OtpSentAt = DateTime.UtcNow;
+        user.OtpAttemptCount = 0;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new
+        {
+            message = sender.IsDevelopmentCodeEnabled ? "Mã OTP đặt lại mật khẩu thử nghiệm đã tạo." : "Nếu tài khoản tồn tại, mã OTP đặt lại mật khẩu đã được gửi đến email trường.",
+            devVerificationCode = sender.IsDevelopmentCodeEnabled ? code : null
+        });
+    }
+
+    [HttpPost("reset-password"), EnableRateLimiting("auth")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest req, CancellationToken cancellationToken)
+    {
+        var email = Normalize(req.Email);
+        if (!Allowed(email)) return BadSchoolEmail();
+        if (req.NewPassword is null || req.NewPassword.Length < 10 || req.NewPassword.Length > 128)
+            return BadRequest(new { message = "Mật khẩu mới cần 10–128 ký tự." });
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
+        if (user is null || user.VerifyTokenHash is null || user.VerifyExpiresAt <= DateTime.UtcNow ||
+            user.OtpAttemptCount >= 5 || req.Code is null || req.Code.Length != 6 || !req.Code.All(char.IsAsciiDigit))
+            return BadRequest(new { message = "Mã OTP không hợp lệ hoặc đã hết hạn. Có thể yêu cầu gửi lại mã." });
+
+        PasswordVerificationResult verified;
+        try { verified = passwords.VerifyHashedPassword(user, user.VerifyTokenHash, req.Code); }
+        catch (FormatException) { verified = PasswordVerificationResult.Failed; }
+        if (verified == PasswordVerificationResult.Failed)
+        {
+            user.OtpAttemptCount++;
+            if (user.OtpAttemptCount >= 5)
+            {
+                user.VerifyTokenHash = null;
+                user.VerifyExpiresAt = null;
+            }
+            await db.SaveChangesAsync(cancellationToken);
+            return BadRequest(new { message = "Mã OTP không hợp lệ hoặc đã hết hạn. Có thể yêu cầu gửi lại mã." });
+        }
+        user.PasswordHash = passwords.HashPassword(user, req.NewPassword);
+        user.EmailVerifiedAt ??= DateTime.UtcNow;
+        user.VerifyTokenHash = null;
+        user.VerifyExpiresAt = null;
+        user.OtpAttemptCount = 0;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new { message = "Đặt lại mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới." });
+    }
+    
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
