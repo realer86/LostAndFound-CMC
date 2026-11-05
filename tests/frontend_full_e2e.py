@@ -30,14 +30,12 @@ class FakeAPI:
   self.calls.append((method,p,q,data))
   code=200;body={}
   if p=='/auth/me':body={'user':self.account} if self.account else {'user':None}
+  elif p=='/auth/login':self.account=OWNER if data.get('email','').startswith('owner') else VIEWER;body={'user':self.account}
+  elif p=='/auth/register':body={'devVerificationCode':'123456'}
   elif p=='/auth/verify':body={'message':'verified'}
-  elif p=='/auth/forgot-password':body={'message':'OTP sent','devVerificationCode':'654321'}
-  elif p=='/auth/reset-password':body={'message':'Đặt lại mật khẩu thành công.'}
   elif p=='/auth/logout':self.account=None;body={'message':'logout'}
   # The integrated UI loads these endpoints when a signed-in user refreshes state.
   elif p in ('/claims/mine','/claims/inbox','/notifications','/handovers','/operations/cases/mine','/operations/custody/mine','/operations/custody/pickup') and method=='GET':body=[]
-  # The integrated UI loads these endpoints when a signed-in user refreshes state.
-  elif p in ('/claims/mine','/claims/inbox','/notifications','/handovers','/operations/cases/mine','/operations/custody/mine') and method=='GET':body=[]
   elif p=='/operations/custody/desks' and method=='GET':body=['Quầy Lost & Found – Thư viện','Quầy Bảo vệ']
   elif p in ('/items/catalog','/reports/catalog'):
    body={'categories':[{'id':1,'name':'Điện tử'},{'id':2,'name':'Ví & túi'}],'locations':[{'id':1,'name':'Tòa A'},{'id':2,'name':'Thư viện'}]}
