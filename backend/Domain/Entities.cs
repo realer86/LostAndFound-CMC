@@ -17,7 +17,25 @@ public class AppUser
     public DateTime? OtpSentAt { get; set; }
     public int OtpAttemptCount { get; set; }
     [MaxLength(128)] public string? GoogleSubject { get; set; }
+    // Increment on password change; both student and admin cookies must reauthenticate.
+    public int SessionVersion { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+// Recovery OTPs are independent from registration-email OTPs.
+public class PasswordResetTicket
+{
+    public Guid UserId { get; set; }
+    [MaxLength(200)] public string? TokenHash { get; set; }
+    public DateTime? ExpiresAt { get; set; }
+    public DateTime? SentAt { get; set; }
+    public int FailedAttempts { get; set; }
+    public DateTime RequestWindowStartedAt { get; set; } = DateTime.UtcNow;
+    public int RequestsInWindow { get; set; }
+    public DateTime DailyWindowStartedAt { get; set; } = DateTime.UtcNow;
+    public int RequestsToday { get; set; }
+    public DateTime FailedWindowStartedAt { get; set; } = DateTime.UtcNow;
+    public int FailedAttemptsInWindow { get; set; }
 }
 
 public class Category
@@ -145,6 +163,8 @@ public class HandoverRoom
     public DateTime? HolderConfirmedAt { get; set; }
     public DateTime? ClaimantConfirmedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
+    public DateTime HolderLastReadAt { get; set; } = DateTime.UtcNow;
+    public DateTime ClaimantLastReadAt { get; set; } = DateTime.UtcNow;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 public class HandoverMessage
@@ -176,6 +196,7 @@ public class Notification
     [MaxLength(60)] public string Type { get; set; } = "INFO";
     [MaxLength(500)] public string Content { get; set; } = "";
     public Guid? ReportId { get; set; }
+    public Guid? RelatedId { get; set; }
     public bool IsRead { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
@@ -213,6 +234,8 @@ public class SupportThread
     public Guid? CaseId { get; set; }
     public Guid? CustodyId { get; set; }
     [MaxLength(20)] public string Department { get; set; } = "ADMIN";
+    public DateTime UserLastReadAt { get; set; } = DateTime.UtcNow;
+    public DateTime StaffLastReadAt { get; set; } = DateTime.UtcNow;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime LastMessageAt { get; set; } = DateTime.UtcNow;
 }

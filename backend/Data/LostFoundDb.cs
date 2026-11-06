@@ -7,6 +7,7 @@ namespace LostFound.Api.Data;
 public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(options)
 {
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<PasswordResetTicket> PasswordResetTickets => Set<PasswordResetTicket>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<CampusLocation> Locations => Set<CampusLocation>();
     public DbSet<ItemReport> Reports => Set<ItemReport>();
@@ -49,6 +50,9 @@ public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(opti
         b.Entity<ChatMessage>().HasOne(x => x.Sender).WithMany().HasForeignKey(x => x.SenderId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<ChatMessage>().HasOne(x => x.Recipient).WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<CampusDirectoryEntry>().ToTable("Directories");
+        b.Entity<PasswordResetTicket>().HasKey(x => x.UserId);
+        b.Entity<PasswordResetTicket>().HasOne<AppUser>().WithMany()
+            .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         b.Entity<AppUser>().HasIndex(x => x.Email).IsUnique();
         b.Entity<AppUser>().HasIndex(x => x.GoogleSubject).IsUnique();
         b.Entity<CaseTicket>().HasIndex(x => new { x.Status, x.CreatedAt });
