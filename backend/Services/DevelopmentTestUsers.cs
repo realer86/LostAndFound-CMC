@@ -46,8 +46,21 @@ public static class DevelopmentTestUsers
         var added = 0;
         foreach (var persona in Personas)
         {
-            // Never overwrite existing users, role assignments, or password hashes.
-            if (await db.Users.AnyAsync(u => u.Email == persona.Email)) continue;
+            var existingUser = await db.Users.FirstOrDefaultAsync(u => u.Email == persona.Email);
+            if (existingUser is not null)
+            {
+                // Password is intentionally controlled by DEV_SEED_PASSWORD in Development.
+                // Do not rehash unchanged values, which would revoke active test cookies at every restart.
+                if (string.IsNullOrEmpty(existingUser.PasswordHash) ||
+                    hasher.VerifyHashedPassword(existingUser, existingUser.PasswordHash, password)
+                        == PasswordVerificationResult.Failed)
+                {
+                    existingUser.PasswordHash = hasher.HashPassword(existingUser, password);
+                    existingUser.SessionVersion++;
+                    await db.SaveChangesAsync();
+                }
+                continue;
+            }
 
             var user = new AppUser
             {

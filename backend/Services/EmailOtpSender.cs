@@ -3,11 +3,13 @@ using System.Net.Mail;
 
 namespace LostFound.Api.Services;
 
+public enum OtpEmailPurpose { VerifyEmail, ResetPassword }
+
 public sealed class EmailOtpSender(IConfiguration config, IWebHostEnvironment environment)
 {
     public bool IsDevelopmentCodeEnabled => environment.IsDevelopment() && config.GetValue<bool>("Auth:AllowDevCode");
 
-    public async Task<bool> SendAsync(string to, string code, CancellationToken cancellationToken)
+    public async Task<bool> SendAsync(string to, string code, CancellationToken cancellationToken, OtpEmailPurpose purpose = OtpEmailPurpose.VerifyEmail)
     {
         // Opt-in testing only. No real email is sent in this mode unless SMTP is configured.
         var host = config["Auth:Smtp:Host"];
@@ -30,8 +32,10 @@ public sealed class EmailOtpSender(IConfiguration config, IWebHostEnvironment en
         };
         using var mail = new MailMessage(new MailAddress(from, "Foundly"), new MailAddress(to))
         {
-            Subject = "Mã xác minh tài khoản Foundly",
-            Body = $"Mã xác minh của bạn là: {code}\nMã có hiệu lực trong 10 phút. Không chia sẻ mã này với bất kỳ ai.",
+            Subject = purpose == OtpEmailPurpose.ResetPassword ? "Mã đặt lại mật khẩu Foundly" : "Mã xác minh tài khoản Foundly",
+            Body = purpose == OtpEmailPurpose.ResetPassword
+                ? $"Bạn đã yêu cầu đặt lại mật khẩu Foundly. Mã của bạn: {code}\nMã có hiệu lực 10 phút và chỉ sử dụng một lần. Nếu không yêu cầu, hãy bỏ qua email này. Không chia sẻ mã."
+                : $"Mã xác minh của bạn là: {code}\nMã có hiệu lực trong 10 phút. Không chia sẻ mã này với bất kỳ ai.",
             IsBodyHtml = false
         };
         await client.SendMailAsync(mail, cancellationToken);

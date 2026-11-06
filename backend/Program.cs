@@ -35,6 +35,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             var user = Guid.TryParse(rawId, out var id) ? await db.Users.FindAsync(id) : null;
             if (user is null || user.Role != context.Principal?.FindFirstValue(ClaimTypes.Role) ||
                 policy.AccountType(user.Email) is null || user.EmailVerifiedAt is null ||
+                context.Principal?.FindFirstValue("foundly:session-version") != user.SessionVersion.ToString() ||
                 (user.SuspendedUntil.HasValue && user.SuspendedUntil > DateTime.UtcNow))
             {
                 context.RejectPrincipal();
@@ -72,6 +73,7 @@ builder.Services.AddAuthentication().AddCookie("AdminCookie", options =>
         if(user is null || user.Role != context.Principal?.FindFirstValue(ClaimTypes.Role) ||
            (user.Role!="ADMIN" && (user.Role!="STAFF" || user.DepartmentCode is not ("SECURITY" or "LIBRARY" or "DORM"))) ||
            policy.AccountType(user.Email) is null || user.EmailVerifiedAt is null ||
+           context.Principal?.FindFirstValue("foundly:session-version") != user.SessionVersion.ToString() ||
            (user.SuspendedUntil.HasValue && user.SuspendedUntil>DateTime.UtcNow))
         {
             context.RejectPrincipal();
@@ -84,6 +86,14 @@ builder.Services.AddAuthorization();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    // Separate per-IP guard for requesting and guessing password recovery codes.
+    options.AddPolicy("password-recovery", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10, Window = TimeSpan.FromMinutes(5), QueueLimit = 0,
+            AutoReplenishment = true
+        }));
     options.AddPolicy("auth", httpContext => RateLimitPartition.GetFixedWindowLimiter(
         httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions
@@ -155,6 +165,8 @@ await using (var scope = app.Services.CreateAsyncScope())
     await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(operationsSchema));
     var supportSchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "07_support_channels.sql");
     await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(supportSchema));
+    var recoverySchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "08_password_recovery.sql");
+    await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(recoverySchema));
 
     // Sửa vấn đề seed liên kết trong Final: mỗi danh mục/khu vực được kiểm tra độc lập.
     if (!await db.Categories.AnyAsync())

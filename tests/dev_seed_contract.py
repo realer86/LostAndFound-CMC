@@ -15,7 +15,7 @@ checks={
   'Explicit opt-in and Development guard': 'if (!config.GetValue<bool>("DevSeed:Enabled")) return;' in seed and 'if (!environment.IsDevelopment())' in seed,
   'No hardcoded test password': 'config["DevSeed:Password"]' in seed and 'password.Length < 16' in seed and 'DEV_SEED_PASSWORD=' in env and 'DEV_SEED_PASSWORD:=' not in compose,
   'Passwords hashed': 'hasher.HashPassword(user, password)' in seed and 'EmailVerifiedAt = DateTime.UtcNow' in seed,
-  'Idempotent and leaves existing accounts unchanged': 'AnyAsync(u => u.Email == persona.Email)' in seed and 'continue;' in seed,
+  'Existing test accounts update only when configured password changes': all(k in seed for k in ('FirstOrDefaultAsync(u => u.Email == persona.Email)', 'PasswordVerificationResult.Failed', 'existingUser.PasswordHash = hasher.HashPassword(existingUser, password)', 'existingUser.SessionVersion++', 'continue;')),
   'No wildcard demo email authorization': 'Personas.FirstOrDefault(persona => persona.Email == normalized)' in seed,
   'Policy blocks tests by default': 'environment.IsDevelopment() && config.GetValue<bool>("DevSeed:Enabled")' in policy and '_allowLocalTestAccounts ? DevelopmentTestUsers.AccountType(value) : null' in policy,
   'Public register and Google restricted to real school domains': 'private bool Allowed(string email) => schoolEmails.IsSchoolEmail(email);' in auth and 'if (!Allowed(email)) return BadSchoolEmail();' in auth,

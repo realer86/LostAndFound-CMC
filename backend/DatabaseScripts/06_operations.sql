@@ -29,8 +29,12 @@ CREATE TABLE IF NOT EXISTS "HandoverRooms" (
   "HolderConfirmedAt" timestamptz NULL,
   "ClaimantConfirmedAt" timestamptz NULL,
   "CompletedAt" timestamptz NULL,
+  "HolderLastReadAt" timestamptz NOT NULL DEFAULT now(),
+  "ClaimantLastReadAt" timestamptz NOT NULL DEFAULT now(),
   "CreatedAt" timestamptz NOT NULL
 );
+ALTER TABLE "HandoverRooms" ADD COLUMN IF NOT EXISTS "HolderLastReadAt" timestamptz NOT NULL DEFAULT now();
+ALTER TABLE "HandoverRooms" ADD COLUMN IF NOT EXISTS "ClaimantLastReadAt" timestamptz NOT NULL DEFAULT now();
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_HandoverRooms_ClaimId" ON "HandoverRooms"("ClaimId");
 
 CREATE TABLE IF NOT EXISTS "HandoverMessages" (
@@ -61,10 +65,14 @@ CREATE TABLE IF NOT EXISTS "Notifications" (
   "Type" varchar(60) NOT NULL,
   "Content" varchar(500) NOT NULL,
   "ReportId" uuid NULL,
+  "RelatedId" uuid NULL,
   "IsRead" boolean NOT NULL DEFAULT false,
   "CreatedAt" timestamptz NOT NULL
 );
+ALTER TABLE "Notifications" ADD COLUMN IF NOT EXISTS "RelatedId" uuid NULL;
 CREATE INDEX IF NOT EXISTS "IX_Notifications_UserId_CreatedAt" ON "Notifications"("UserId","CreatedAt");
+CREATE UNIQUE INDEX IF NOT EXISTS "UX_Notifications_MatchPair"
+  ON "Notifications"("UserId","ReportId","RelatedId") WHERE "Type"='MATCH';
 
 CREATE TABLE IF NOT EXISTS "AuditLogs" (
   "Id" uuid PRIMARY KEY,

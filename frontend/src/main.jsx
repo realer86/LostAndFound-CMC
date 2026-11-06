@@ -31,7 +31,7 @@ function App(){
   const [me,setMe]=useState(null),[page,setPage]=useState('discover'),[filter,setFilter]=useState('ALL'),[search,setSearch]=useState('');
   const [reports,setReports]=useState([]),[mine,setMine]=useState([]),[catalog,setCatalog]=useState({categories:[],locations:[]});
   const [selected,setSelected]=useState(null),[showAuth,setShowAuth]=useState(false),[authInitialMode,setAuthInitialMode]=useState('login'),[showPost,setShowPost]=useState(false),[editingReport,setEditingReport]=useState(null),[reportPage,setReportPage]=useState(1);
-  const [notifications,setNotifications]=useState([]),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null),[matchingLoading,setMatchingLoading]=useState(false);
+  const [notifications,setNotifications]=useState([]),[matchingUnread,setMatchingUnread]=useState(0),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null),[matchingLoading,setMatchingLoading]=useState(false);
   const [myClaims,setMyClaims]=useState([]),[inbox,setInbox]=useState([]);
   const [selectedClaimRoom,setSelectedClaimRoom]=useState(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null),[mobileNav,setMobileNav]=useState(false),[count,setCount]=useState(0);
@@ -43,18 +43,25 @@ function App(){
   const loadReports=async(index=1)=>{const requestId=++reportsRequestRef.current;const result=await api(`/reports?type=${filter==='ALL'?'':filter}&q=${encodeURIComponent(search)}&page=${index}`);if(requestId!==reportsRequestRef.current)return;setReports(previous=>index===1?result.items:[...previous,...result.items]);setCount(result.total);setReportPage(index)};
   const loadMine=async()=>{if(!me)return;const session=sessionKeyRef.current;const items=await api('/reports/mine');if(session===sessionKeyRef.current)setMine(items);};
   const loadNotifs=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const items=await api('/notifications');if(session===sessionKeyRef.current)setNotifications(items);};
+  const loadMatchingUnread=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const result=await api('/notifications/matches/unread');if(session===sessionKeyRef.current)setMatchingUnread(Number(result.count)||0);};
   const loadClaims=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const [a,b]=await Promise.all([api('/claims/mine'),api('/claims/inbox')]);if(session===sessionKeyRef.current){setMyClaims(a);setInbox(b);}};
-  const refresh=async()=>{await Promise.all(fullBackend?[loadReports(),loadMine(),loadNotifs(),loadClaims()]:[loadReports(),loadMine()].filter(Boolean))};
+  const refresh=async()=>{await Promise.all(fullBackend?[loadReports(),loadMine(),loadNotifs(),loadMatchingUnread(),loadClaims()]:[loadReports(),loadMine()].filter(Boolean))};
   useEffect(()=>{api('/auth/me').then(data=>setMe(data.user)).catch(()=>{});api('/reports/catalog').then(setCatalog).catch(()=>{});},[]);
   useEffect(()=>{loadReports().catch(err=>notify(err.message,true))},[filter,search]);
-  useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);matchingRequestRef.current++;setSelectedMine(null);setNotifications([]);setMyClaims([]);setInbox([]);}},[me]);
+  useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadMatchingUnread(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);matchingRequestRef.current++;setSelectedMine(null);setNotifications([]);setMatchingUnread(0);setMyClaims([]);setInbox([]);}},[me]);
   // Refresh the notification bell automatically, including when someone posts in another session.
   useEffect(()=>{
     if(!fullBackend||!me?.id)return;
     let active=true;
-    const check=async()=>{try{const items=await api('/notifications');if(active)setNotifications(items);}catch{/* Session may have expired; the next login refreshes notifications. */}};
+    const check=async()=>{try{const [items,result]=await Promise.all([api('/notifications'),api('/notifications/matches/unread')]);if(active){setNotifications(items);setMatchingUnread(Number(result.count)||0);}}catch{/* Session may have expired; the next login refreshes notifications. */}};
     const timer=setInterval(check,12000);
     return ()=>{active=false;clearInterval(timer);};
+  },[me?.id]);
+  useEffect(()=>{
+    if(!me?.id)return;
+    const refreshUnread=()=>{loadNotifs().catch(()=>{});};
+    window.addEventListener('foundly:messages-read',refreshUnread);
+    return ()=>window.removeEventListener('foundly:messages-read',refreshUnread);
   },[me?.id]);
   useEffect(()=>{if(page==='discover')loadReports().catch(()=>{});else if(page==='mine')loadMine().catch(()=>{});else if(page==='matching'&&me)loadMine().catch(()=>{});else if(fullBackend&&page==='claims')loadClaims().catch(()=>{});else if(fullBackend&&page==='notifications')loadNotifs().catch(()=>{});},[page]);
   useEffect(()=>{if(page==='matching'&&me&&mine.length&&!selectedMine){const first=mine.find(r=>r.status==='OPEN');if(first)getMatches(first.id);}},[page,me,mine,selectedMine]);
@@ -78,7 +85,12 @@ function App(){
     goto('matching');
     try {
       const results=await api(`/reports/${id}/matches?minScore=50&limit=10`);
-      if(requestId===matchingRequestRef.current)setMatches(results.matches || []);
+      if(requestId===matchingRequestRef.current){
+        setMatches(results.matches || []);
+        await api(`/notifications/matches/${id}/read`,{method:'PATCH'});
+        await loadMatchingUnread();
+        await loadNotifs();
+      }
     } catch(err) {
       if(requestId===matchingRequestRef.current)notify(err.message,true);
     } finally {
@@ -91,7 +103,7 @@ function App(){
     await api('/auth/logout',{method:'POST'});
     sessionKeyRef.current++;matchingRequestRef.current++;
     // Clear every personal view to prevent the previous user's data lingering after account switching.
-    setMe(null);setNotifications([]);setMine([]);setMatches([]);setSelectedMine(null);
+    setMe(null);setNotifications([]);setMatchingUnread(0);setMine([]);setMatches([]);setSelectedMine(null);
     setMyClaims([]);setInbox([]);
     setSelected(null);setShowAuth(false);setShowPost(false);setEditingReport(null);
     setSearch('');setFilter('ALL');goto('discover');notify('Đã đăng xuất. Bạn có thể đăng nhập tài khoản khác.');
@@ -102,11 +114,11 @@ function App(){
       <nav className={'nav '+(mobileNav?'navopen':'')}>
         <button className={page==='discover'?'active':''} onClick={()=>goto('discover')}>Khám phá</button>
         <button className={page==='mine'?'active':''} onClick={()=>me?goto('mine'):openAuth()}>Bài của tôi</button>
-        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp</button>
+        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp{fullBackend&&matchingUnread>0&&<i className="dot message-dot" aria-label="Có gợi ý mới"/>}</button>
         <button className={page==='claims'||page==='upcoming-claims'?'active':''} onClick={()=>gotoFeature('claims')}>Yêu cầu nhận đồ{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='operations'||page==='upcoming-operations'?'active':''} onClick={()=>gotoFeature('operations')}>Hỗ trợ & ký gửi{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
-        <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
-        <button className={page==='contacts'?'active':''} onClick={()=>goto('contacts')}>Hỗ trợ & Danh bạ</button>
+        <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{fullBackend&&notifications.some(x=>x.type==='MESSAGE'&&!x.isRead)&&<i className="dot message-dot" aria-label="Có tin nhắn mới"/>}{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
+        <button className={page==='contacts'?'active':''} onClick={()=>goto('contacts')}>Hỗ trợ & Danh bạ{fullBackend&&notifications.some(x=>x.type==='SUPPORT'&&!x.isRead)&&<i className="dot message-dot" aria-label="Có tin nhắn mới"/>}</button>
         <div className="mobile-nav-actions">
           <button type="button" className="mobile-post" onClick={()=>{setMobileNav(false);openPost('LOST')}}><Plus size={16}/> Đăng tin</button>
           {!me&&<>
@@ -162,7 +174,7 @@ function App(){
     {page==='handovers'&&me&&<HandoverHub user={me} selectedClaimId={selectedClaimRoom} notify={notify} onOpenSupport={()=>goto('contacts')} onRefresh={async()=>{await Promise.all([loadNotifs(),loadClaims(),loadMine()])}}/>}
     {page==='notifications'&&<section className="container privatepage"><PageHeader kicker="CẬP NHẬT DÀNH CHO BẠN" title="Thông báo" subtitle="Gợi ý ghép đồ và thay đổi trạng thái yêu cầu."/>
       <div className="notification-toolbar"><span>Chuông cập nhật tự động mỗi 12 giây.</span><button type="button" onClick={()=>request(loadNotifs)} disabled={busy}><RefreshCcw size={15}/> Làm mới thông báo</button></div>
-      <div className="listpanel">{notifications.map(n=><button key={n.id} className={'notirow '+(!n.isRead?'unread':'')} onClick={()=>request(async()=>{await api(`/notifications/${n.id}/read`,{method:'PATCH'});if(['HANDOVER','MESSAGE','APPOINTMENT','RETURNED','REMINDER'].includes(n.type)){setSelectedClaimRoom(null);goto('handovers')}else if(n.type==='SUPPORT'){goto('contacts')}else if(n.type==='CLAIM'){goto('claims')}else if(['CASE','DISPUTE','MODERATION','CUSTODY','EXPIRY'].includes(n.type)){goto('operations')}else if(n.reportId){const item=await api(`/reports/${n.reportId}`);setSelected(item)}await loadNotifs()})}><span className="notiicon"><Bell size={18}/></span><span><strong>{n.type==='MATCH'?'Gợi ý trùng khớp':n.type==='CLAIM'?'Yêu cầu nhận đồ':n.type==='MESSAGE'?'Tin nhắn bàn giao':n.type==='APPOINTMENT'?'Lịch bàn giao':n.type==='HANDOVER'?'Xác nhận bàn giao':n.type==='RETURNED'?'Đã trao trả':n.type==='CASE'?'Kết quả phản ánh':n.type==='DISPUTE'?'Tranh chấp':n.type==='SUPPORT'?'Phản hồi hỗ trợ':n.type==='MODERATION'?'Kiểm duyệt':n.type==='CUSTODY'?'Ký gửi tại quầy':n.type==='REMINDER'?'Sắp đến lịch hẹn':n.type==='EXPIRY'?'Bài hết hạn':'Thông báo'}</strong><small>{n.content}</small><em>{time(n.createdAt)}</em></span>{!n.isRead&&<i className="newdot"/>}</button>)}{notifications.length===0&&<p className="muted padded">Chưa có thông báo.</p>}</div></section>}
+      <div className="listpanel">{notifications.map(n=><button key={n.id} className={'notirow '+(!n.isRead?'unread':'')} onClick={()=>request(async()=>{await api(`/notifications/${n.id}/read`,{method:'PATCH'});if(n.type==='MATCH'&&n.reportId){await loadNotifs();await openMatches(n.reportId);return;}if(['HANDOVER','MESSAGE','APPOINTMENT','RETURNED','REMINDER'].includes(n.type)){setSelectedClaimRoom(null);goto('handovers')}else if(n.type==='SUPPORT'){goto('contacts')}else if(n.type==='CLAIM'){goto('claims')}else if(['CASE','DISPUTE','MODERATION','CUSTODY','EXPIRY'].includes(n.type)){goto('operations')}else if(n.reportId){const item=await api(`/reports/${n.reportId}`);setSelected(item)}await loadNotifs()})}><span className="notiicon"><Bell size={18}/></span><span><strong>{n.type==='MATCH'?'Gợi ý trùng khớp':n.type==='CLAIM'?'Yêu cầu nhận đồ':n.type==='MESSAGE'?'Tin nhắn bàn giao':n.type==='APPOINTMENT'?'Lịch bàn giao':n.type==='HANDOVER'?'Xác nhận bàn giao':n.type==='RETURNED'?'Đã trao trả':n.type==='CASE'?'Kết quả phản ánh':n.type==='DISPUTE'?'Tranh chấp':n.type==='SUPPORT'?'Phản hồi hỗ trợ':n.type==='MODERATION'?'Kiểm duyệt':n.type==='CUSTODY'?'Ký gửi tại quầy':n.type==='REMINDER'?'Sắp đến lịch hẹn':n.type==='EXPIRY'?'Bài hết hạn':'Thông báo'}</strong><small>{n.content}</small><em>{time(n.createdAt)}</em></span>{!n.isRead&&<i className="newdot"/>}</button>)}{notifications.length===0&&<p className="muted padded">Chưa có thông báo.</p>}</div></section>}
     </main>
     <footer><div className="container footerinner"><div className="footerbrand"><span className="brandmark"><PackageOpen size={18}/></span><div><strong>foundly</strong><small>Dự án quản lý đồ thất lạc tại trường đại học</small></div></div><p>Made for campus communities · Phiên bản demo chạy localhost · {fullBackend?<span>Quản trị sử dụng giao diện riêng</span>:<span>Quản trị nâng cao đang phát triển</span>}</p><p>Bảo vệ quyền riêng tư • Xác minh trước khi bàn giao</p></div></footer>
     {showAuth&&<AuthModal initialMode={authInitialMode} onClose={()=>setShowAuth(false)} onSuccess={authDone} notify={notify} request={request}/>}
@@ -191,7 +203,13 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   const loadActive=async(id)=>{
     if(!id)return;
     const [details,history]=await Promise.all([api(`/handovers/${id}`),api(`/handovers/${id}/messages`)]);
-    if(roomIdRef.current===id){setRoom(details||null);setMessages(Array.isArray(history)?history.filter(Boolean):[]);}
+    if(roomIdRef.current===id){
+      setRoom(details||null);
+      setMessages(Array.isArray(history)?history.filter(Boolean):[]);
+      // Reading room history marks it read server-side; don't wait 10s for the sidebar.
+      setRooms(current=>current.map(item=>item.id===id?{...item,hasUnread:false}:item));
+      window.dispatchEvent(new Event('foundly:messages-read'));
+    }
   };
   useEffect(()=>{appliedClaimRef.current=false;loadRooms().catch(e=>{setLoading(false);notify(e.message,true)});},[selectedClaimId,user?.id]);
   useEffect(()=>{
@@ -224,7 +242,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   return <section className="container privatepage handover-page"><PageHeader kicker="BÀN GIAO AN TOÀN" title="Phòng bàn giao" subtitle="Chỉ hai tài khoản liên quan được nhắn tin, hẹn gặp và cùng xác nhận hoàn trả. Không hiển thị thông tin liên hệ cá nhân."/>
     <div className="handover-layout">
       <aside className="handover-sidebar"><h3><MessagesSquare size={18}/> Các phòng của bạn</h3>
-        {rooms.filter(Boolean).map(r=><button key={r.id} className={'room-choice '+(active===r.id?'selected':'')} onClick={()=>setActive(r.id)}><strong>{r?.itemName||'Vật phẩm bàn giao'}</strong><span>{r?.myRole==='HOLDER'?'Bạn là người nhặt':'Bạn là người mất'} · {(r?.myRole==='HOLDER'?r?.claimant?.fullName:r?.holder?.fullName)||'Người dùng'}</span><small>{r?.status==='COMPLETED'?'✓ Đã hoàn tất':r?.status==='SCHEDULED'?'Đã chốt lịch':r?.status==='AWAITING_CONFIRMATION'?'Chờ xác nhận':'Đang hẹn bàn giao'}</small></button>)}
+        {rooms.filter(Boolean).map(r=><button key={r.id} className={'room-choice '+(active===r.id?'selected':'')} onClick={()=>{if(active===r.id)loadActive(r.id).catch(e=>notify(e.message,true));else setActive(r.id)}}><strong>{r?.itemName||'Vật phẩm bàn giao'}</strong><span>{r?.myRole==='HOLDER'?'Bạn là người nhặt':'Bạn là người mất'} · {(r?.myRole==='HOLDER'?r?.claimant?.fullName:r?.holder?.fullName)||'Người dùng'}</span><small>{r?.status==='COMPLETED'?'✓ Đã hoàn tất':r?.status==='SCHEDULED'?'Đã chốt lịch':r?.status==='AWAITING_CONFIRMATION'?'Chờ xác nhận':'Đang hẹn bàn giao'}</small>{r?.hasUnread&&<i className="unread-dot" aria-label="Có tin nhắn chưa đọc"/>}</button>)}
         {!rooms.length&&<p className="handover-muted">{loading?'Đang tải phòng...':'Chưa có phòng. Khi yêu cầu nhận đồ được duyệt, phòng riêng sẽ xuất hiện ở đây.'}</p>}
       </aside>
       <div className="handover-main">
@@ -378,12 +396,12 @@ function AuthModal({initialMode='login',onClose,onSuccess,notify,request}){
    const data=await api(endpoint,{method:'POST',body:JSON.stringify({email})});
    setCode(data.devVerificationCode||'');notify(data.message);
  });
- return <Modal onClose={onClose}><div className="modalhead"><span className="modalsymbol"><ShieldCheck size={22}/></span><span className="kicker">FOUNDLY · TÀI KHOẢN TRƯỜNG</span><h2>{mode==='login'?'Đăng nhập vào Foundly':mode==='register'?'Tạo tài khoản Foundly':mode==='verify'?'Xác minh email trường':mode==='forgot'?'Quên mật khẩu':'Đặt lại mật khẩu mới'}</h2><p>{mode==='verify'?'Nhập mã OTP 6 chữ số đã gửi đến email. Mã có hiệu lực 10 phút.':mode==='register'?'Đăng ký bằng email được trường cấp để kết nối và tìm đồ thất lạc.':mode==='forgot'?'Nhập email trường đã đăng ký để nhận mã OTP 6 chữ số khôi phục mật khẩu.':mode==='reset'?'Nhập mã OTP 6 chữ số từ email và thiết lập mật khẩu mới (tối thiểu 10 ký tự).':'Sử dụng email sinh viên hoặc giảng viên của trường.'}</p></div>
+ return <Modal onClose={onClose}><div className="modalhead"><span className="modalsymbol"><ShieldCheck size={22}/></span><span className="kicker">FOUNDLY · TÀI KHOẢN TRƯỜNG</span><h2>{mode==='login'?'Đăng nhập vào Foundly':mode==='register'?'Tạo tài khoản Foundly':mode==='verify'?'Xác minh email trường':mode==='forgot'?'Quên mật khẩu':'Đặt lại mật khẩu mới'}</h2><p>{mode==='verify'?'Nhập mã OTP 6 chữ số đã gửi đến email. Mã có hiệu lực 10 phút.':mode==='register'?'Đăng ký bằng email được trường cấp để kết nối và tìm đồ thất lạc.':mode==='forgot'?'Nhập email trường đã đăng ký để nhận mã OTP 6 chữ số khôi phục mật khẩu.':mode==='reset'?'Nhập mã OTP 6 chữ số từ email và thiết lập mật khẩu mới (tối thiểu 12 ký tự).':'Sử dụng email sinh viên hoặc giảng viên của trường.'}</p></div>
  <form onSubmit={submit} className="form">
  {mode==='register'&&<label>Họ và tên<input required minLength={2} maxLength={120} value={fullName} onChange={e=>setFullName(e.target.value)} placeholder="Nguyễn Văn A"/></label>}
  <label>Email trường<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="ten@st.cmcu.edu.vn" readOnly={mode==='verify'||mode==='reset'}/><small>Sinh viên: @st.cmcu.edu.vn · Giảng viên: @cmcu.edu.vn</small></label>
  {(mode==='verify'||mode==='reset')&&<label>Mã OTP<input value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,'').slice(0,6))} inputMode="numeric" autoComplete="one-time-code" required pattern="[0-9]{6}" maxLength={6}/></label>}
- {(mode==='login'||mode==='register'||mode==='reset')&&<label>{mode==='reset'?'Mật khẩu mới':'Mật khẩu'}<input type={showPassword?'text':'password'} autoComplete={mode==='register'||mode==='reset'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='register'||mode==='reset'?10:1} placeholder="••••••••••"/></label>}
+ {(mode==='login'||mode==='register'||mode==='reset')&&<label>{mode==='reset'?'Mật khẩu mới':'Mật khẩu'}<input type={showPassword?'text':'password'} autoComplete={mode==='register'||mode==='reset'?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} required minLength={mode==='reset'?12:mode==='register'?10:1} placeholder="••••••••••"/></label>}
  <button className="btn primary submit" type="submit">{mode==='login'?'Đăng nhập':mode==='register'?'Đăng ký và gửi OTP':mode==='verify'?'Xác minh OTP':mode==='forgot'?'Gửi mã OTP khôi phục':'Cập nhật mật khẩu mới'} <ArrowRight size={17}/></button>
  </form>
  {(mode==='login'||mode==='register'||mode==='reset')&&<div className="password-label-row" style={{marginTop:'10px'}}>

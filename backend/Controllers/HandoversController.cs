@@ -56,11 +56,14 @@ public class HandoversController(LostFoundDb db) : ControllerBase
             acceptedAppointment = accepted is null ? null : new { accepted.Id,accepted.Place,accepted.MeetingAt,accepted.Status },
             pendingAppointment = pending is null ? null : new { pending.Id,pending.Place,pending.MeetingAt,pending.Status,pending.ProposedById },
             custody = custody is null ? null : new { custody.Id, custody.Desk, custody.Status, custody.ReceivedAt, custody.ReleasedAt },
+            hasUnread = await db.HandoverMessages.AnyAsync(x => x.RoomId == room.Room.Id &&
+                x.SenderId != UserId && x.CreatedAt > (UserId == room.Found.UserId
+                    ? room.Room.HolderLastReadAt : room.Room.ClaimantLastReadAt)),
             safePlaces = SafePlaces
         };
     }
-    private void Push(Guid receiverId, Guid reportId, string message, string type="HANDOVER") =>
-        db.Notifications.Add(new Notification { UserId=receiverId, ReportId=reportId, Type=type, Content=message });
+    private void Push(Guid receiverId, Guid reportId, string message, string type="HANDOVER", Guid? relatedId=null) =>
+        db.Notifications.Add(new Notification { UserId=receiverId, ReportId=reportId, RelatedId=relatedId, Type=type, Content=message });
 
     [HttpGet]
     public async Task<IActionResult> Mine()
@@ -92,10 +95,18 @@ public class HandoversController(LostFoundDb db) : ControllerBase
     [HttpGet("{id:guid}/messages")]
     public async Task<IActionResult> Messages(Guid id)
     {
-        if(await AuthorizedRoom(id) is null)return NotFound();
+        var access=await AuthorizedRoom(id);
+        if(access is null)return NotFound();
+        var readAt=DateTime.UtcNow;
+        if(UserId==access.Found.UserId)access.Room.HolderLastReadAt=readAt;
+        else access.Room.ClaimantLastReadAt=readAt;
+        var incomingNotifications=await db.Notifications.Where(x=>x.UserId==UserId &&
+            x.Type=="MESSAGE" && x.RelatedId==id && !x.IsRead).ToListAsync();
+        foreach(var notification in incomingNotifications)notification.IsRead=true;
         var items=await db.HandoverMessages.AsNoTracking().Where(x=>x.RoomId==id)
             .OrderByDescending(x=>x.CreatedAt).Take(100).OrderBy(x=>x.CreatedAt)
             .Select(x=>new {x.Id,x.SenderId,x.Content,x.CreatedAt}).ToListAsync();
+        await db.SaveChangesAsync();
         return Ok(items);
     }
     [HttpPost("{id:guid}/messages")]
@@ -110,8 +121,10 @@ public class HandoversController(LostFoundDb db) : ControllerBase
         if(sent>=15)return StatusCode(429,new{message="Bạn gửi tin nhắn quá nhanh. Vui lòng thử lại sau."});
         var other=access.Found.UserId==UserId?access.Claim.ClaimantId:access.Found.UserId;
         var item=new HandoverMessage{RoomId=id,SenderId=UserId,Content=message};
+        if(UserId==access.Found.UserId)access.Room.HolderLastReadAt=item.CreatedAt;
+        else access.Room.ClaimantLastReadAt=item.CreatedAt;
         db.HandoverMessages.Add(item);
-        Push(other,access.Found.Id,$"Bạn có tin nhắn mới trong Phòng bàn giao: {access.Found.ItemName}.","MESSAGE");
+        Push(other,access.Found.Id,$"Bạn có tin nhắn mới trong Phòng bàn giao: {access.Found.ItemName}.","MESSAGE",id);
         await db.SaveChangesAsync();
         return Ok(new{item.Id,item.SenderId,item.Content,item.CreatedAt});
     }
