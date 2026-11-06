@@ -40,15 +40,21 @@ public static class DevelopmentTestUsers
         var password = config["DevSeed:Password"];
         if (string.IsNullOrWhiteSpace(password) || password.Length < 16 || password.Length > 128)
             throw new InvalidOperationException("Set DEV_SEED_PASSWORD in .env (16-128 characters) for local test accounts.");
-
         var db = services.GetRequiredService<LostFoundDb>();
         var hasher = services.GetRequiredService<IPasswordHasher<AppUser>>();
         var added = 0;
         foreach (var persona in Personas)
         {
             // Never overwrite existing users, role assignments, or password hashes.
-            if (await db.Users.AnyAsync(u => u.Email == persona.Email)) continue;
+        var existingUser = await db.Users
+            .FirstOrDefaultAsync(u => u.Email == persona.Email);
 
+        if (existingUser != null)
+        {
+            existingUser.PasswordHash = hasher.HashPassword(existingUser, password);
+            await db.SaveChangesAsync();
+            continue;
+        }
             var user = new AppUser
             {
                 Email = persona.Email,
