@@ -36,6 +36,9 @@ class FakeAPI:
   elif p=='/auth/logout':self.account=None;body={'message':'logout'}
   # The integrated UI loads these endpoints when a signed-in user refreshes state.
   elif p in ('/claims/mine','/claims/inbox','/notifications','/handovers','/operations/cases/mine','/operations/custody/mine','/operations/custody/pickup') and method=='GET':body=[]
+  # Matching notifications are separate from the general notification list.
+  elif p=='/notifications/matches/unread' and method=='GET':body={'count':0}
+  elif re.fullmatch(r'/notifications/matches/[^/]+/read',p) and method=='PATCH':body={'message':'read'}
   elif p=='/operations/custody/desks' and method=='GET':body=['Quầy Lost & Found – Thư viện','Quầy Bảo vệ']
   elif p in ('/items/catalog','/reports/catalog'):
    body={'categories':[{'id':1,'name':'Điện tử'},{'id':2,'name':'Ví & túi'}],'locations':[{'id':1,'name':'Tòa A'},{'id':2,'name':'Thư viện'}]}
