@@ -6,7 +6,7 @@ async function call(path,options={}){
  const r=await fetch('/api'+path,{credentials:'same-origin',...options,headers:{'Content-Type':'application/json',...options.headers}});
  const json=await r.json().catch(()=>({}));if(!r.ok)throw new Error(json.message||`HTTP ${r.status}`);return json;
 }
-const labels={ADMIN:'Admin - phản ánh',SECURITY:'Bảo vệ',LIBRARY:'Thư viện',DORM:'Ký túc xá'};
+const labels={ADMIN:'Admin - Phản ánh',SECURITY:'Bảo vệ',LIBRARY:'Thư viện',DORM:'Ký túc xá'};
 const when=v=>new Date(v).toLocaleString('vi-VN');
 export default function SupportAdminInbox({user}){
  const [filter,setFilter]=useState(user?.role==='STAFF'?(user.departmentCode||''):''),[threads,setThreads]=useState([]),[id,setId]=useState(null),[messages,setMessages]=useState([]),[draft,setDraft]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);

@@ -173,3 +173,10 @@
 .status.received{background:#def8ed;color:#009b83}
 .status.released{background:#e8e3ff;color:#6958b3}
 .message-dot{background:#e11d48}
+.footer-link{border:0;background:none;padding:0;color:#7fe0d2;font:inherit;text-decoration:underline;cursor:pointer}
+.footer-link:focus-visible{outline:2px solid #7fe0d2;outline-offset:2px}
+
+/* Prominent trust link on the home hero, keyboard-accessible and mobile friendly. */
+.hero-trust-link{display:inline-flex;align-items:center;gap:8px;max-width:100%;border:0;background:none;color:#087d71;font-weight:800;font-size:12.5px;padding:10px 0;margin-top:14px;text-align:left;white-space:normal}
+.hero-trust-link:hover{text-decoration:underline}
+.hero-trust-link:focus-visible{outline:2px solid #08a99a;outline-offset:4px;border-radius:5px}

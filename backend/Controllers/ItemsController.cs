@@ -25,6 +25,7 @@ public class ItemsController(LostFoundDb db) : ControllerBase
         x.Id, x.Type, x.Status, x.ItemName, x.Description, x.Color, x.Brand, x.CategoryId,
         category = x.Category?.Name, x.LocationId, location = x.Location?.Name, x.LocationDetail,
         x.EventTime, x.CreatedAt, x.UpdatedAt, x.ExpiresAt, x.UserId,
+        posterVerified = x.User != null && x.User.EmailVerifiedAt != null,
         images = x.Images.Select(im => im.Url).ToArray()
     };
 
@@ -64,7 +65,7 @@ public class ItemsController(LostFoundDb db) : ControllerBase
     {
         page = Math.Max(page, 1); pageSize = Math.Clamp(pageSize, 1, 40);
         var query = db.Reports.AsNoTracking().Include(x => x.Images)
-            .Include(x => x.Category).Include(x => x.Location)
+            .Include(x => x.Category).Include(x => x.Location).Include(x => x.User)
             .Where(x => x.Status == "OPEN" || x.Status == "RETURNED");
         if (type is "LOST" or "FOUND") query = query.Where(x => x.Type == type);
         if (categoryId.HasValue) query = query.Where(x => x.CategoryId == categoryId);
@@ -84,7 +85,7 @@ public class ItemsController(LostFoundDb db) : ControllerBase
     public async Task<IActionResult> Mine()
     {
         var items = await db.Reports.AsNoTracking().Include(x => x.Images)
-            .Include(x => x.Location).Include(x => x.Category)
+            .Include(x => x.Location).Include(x => x.Category).Include(x => x.User)
             .Where(x => x.UserId == UserId).OrderByDescending(x => x.CreatedAt).ToListAsync();
         return Ok(items.Select(PublicReport));
     }
@@ -93,7 +94,7 @@ public class ItemsController(LostFoundDb db) : ControllerBase
     public async Task<IActionResult> Detail(Guid id)
     {
         var r = await db.Reports.AsNoTracking().Include(x => x.Images)
-            .Include(x => x.Location).Include(x => x.Category)
+            .Include(x => x.Location).Include(x => x.Category).Include(x => x.User)
             .FirstOrDefaultAsync(x => x.Id == id);
         if (r is null || (r.Status is not ("OPEN" or "RETURNED") && r.UserId != UserId && !Admin))
             return NotFound(new { message = "Không tìm thấy bài." });

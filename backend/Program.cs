@@ -167,6 +167,8 @@ await using (var scope = app.Services.CreateAsyncScope())
     await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(supportSchema));
     var recoverySchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "08_password_recovery.sql");
     await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(recoverySchema));
+    var reviewsSchema = Path.Combine(app.Environment.ContentRootPath, "DatabaseScripts", "09_public_reviews.sql");
+    await db.Database.ExecuteSqlRawAsync(await File.ReadAllTextAsync(reviewsSchema));
 
     // Sửa vấn đề seed liên kết trong Final: mỗi danh mục/khu vực được kiểm tra độc lập.
     if (!await db.Categories.AnyAsync())

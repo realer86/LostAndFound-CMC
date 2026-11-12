@@ -7,6 +7,7 @@ namespace LostFound.Api.Data;
 public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(options)
 {
     public DbSet<AppUser> Users => Set<AppUser>();
+    public DbSet<FoundlyPublicReview> PublicReviews => Set<FoundlyPublicReview>();
     public DbSet<PasswordResetTicket> PasswordResetTickets => Set<PasswordResetTicket>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<CampusLocation> Locations => Set<CampusLocation>();
@@ -30,6 +31,12 @@ public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(opti
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        b.Entity<FoundlyPublicReview>().ToTable("FoundlyPublicReviews")
+            .HasIndex(x => new { x.HandoverRoomId, x.ReviewerId }).IsUnique();
+        b.Entity<FoundlyPublicReview>().HasOne<HandoverRoom>().WithMany()
+            .HasForeignKey(x => x.HandoverRoomId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<FoundlyPublicReview>().HasOne<AppUser>().WithMany()
+            .HasForeignKey(x => x.ReviewerId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<SupportThread>().HasIndex(x => x.CaseId).IsUnique();
         b.Entity<SupportThread>().HasIndex(x => x.CustodyId).IsUnique();
         b.Entity<SupportThread>().HasIndex(x => new { x.UserId, x.LastMessageAt });

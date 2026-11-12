@@ -248,3 +248,16 @@ public class SupportMessage
     [MaxLength(1500)] public string Content { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+// Public feedback tied to a completed, two-sided handover (no fabricated testimonials).
+public class FoundlyPublicReview
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid HandoverRoomId { get; set; }
+    public Guid ReviewerId { get; set; }
+    public int Rating { get; set; }
+    [MaxLength(500)] public string Comment { get; set; } = "";
+    [MaxLength(30)] public string ParticipantRole { get; set; } = "";
+    public bool IsVisible { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
