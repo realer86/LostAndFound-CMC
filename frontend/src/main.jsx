@@ -5,6 +5,7 @@ import './style.css';
 import SupportInbox from './components/SupportInbox.jsx';
 import MatchingPanel from './components/MatchingPanel.jsx';
 import TrustSection from './components/TrustSection.jsx';
+import RoomReviewForm from './components/RoomReviewForm.jsx';
 import SafetyPage from './components/SafetyPage.jsx';
 
 // Claims, custody, notifications and handovers are served by the existing backend.
@@ -193,6 +194,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   const [rooms,setRooms]=useState([]),[active,setActive]=useState(null),[room,setRoom]=useState(null),[messages,setMessages]=useState([]);
   const [text,setText]=useState(''),[place,setPlace]=useState('Quầy bảo vệ - Tòa A'),[when,setWhen]=useState('');
   const [ack,setAck]=useState(false),[pending,setPending]=useState(false),[loading,setLoading]=useState(true);
+  const [focusReviewRoom,setFocusReviewRoom]=useState(null);
   const roomIdRef=useRef(null);
   const appliedClaimRef=useRef(false);
   const loadRooms=async()=>{
@@ -218,7 +220,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   };
   useEffect(()=>{appliedClaimRef.current=false;loadRooms().catch(e=>{setLoading(false);notify(e.message,true)});},[selectedClaimId,user?.id]);
   useEffect(()=>{
-    roomIdRef.current=active;setRoom(null);setMessages([]);setAck(false);
+    roomIdRef.current=active;setRoom(null);setMessages([]);setAck(false);setFocusReviewRoom(null);
     if(active)loadActive(active).catch(e=>notify(e.message,true));
     const timer=setInterval(()=>{
       loadRooms().catch(()=>{});
@@ -237,7 +239,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
     act(async()=>{await api(`/handovers/${active}/appointments`,{method:'POST',body:JSON.stringify({place,meetingAt:new Date(when).toISOString()})});notify('Đã gửi lịch đề xuất cho đối phương.');});
   };
   const respond=(yes)=>act(async()=>{if(!room?.pendingAppointment?.id)return;await api(`/handovers/${active}/appointments/${room.pendingAppointment.id}`,{method:'PATCH',body:JSON.stringify({accept:yes})});notify(yes?'Đã đồng ý lịch gặp.':'Đã từ chối lịch gặp.');});
-  const confirm=()=>act(async()=>{const result=await api(`/handovers/${active}/confirm`,{method:'POST'});notify(result.message);setAck(false);});
+  const confirm=()=>act(async()=>{const result=await api(`/handovers/${active}/confirm`,{method:'POST'});notify(result.message);setAck(false);if(result.completed)setFocusReviewRoom(active);});
 
   const other=room?(room.myRole==='HOLDER'?room.claimant:room.holder):null;
   const confirmedSelf=Boolean(room&&(room.myRole==='HOLDER'?(room.holderConfirmedAt||room.custody?.status==='RELEASED'):room.claimantConfirmedAt));
@@ -307,6 +309,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
             {!room?.acceptedAppointment&&!complete&&<p className="handover-muted">Cần có lịch được cả hai chấp thuận trước khi xác nhận bàn giao.</p>}
             {complete&&<p className="handover-complete"><CheckCircle2 size={18}/> Đã hoàn thành. Cả hai bên xác nhận và bài nhặt được chuyển thành RETURNED.</p>}
           </div>
+          {complete && <RoomReviewForm key={room.id} room={room} autoFocus={focusReviewRoom===room.id} /> }
         </>}
       </div>
     </div>

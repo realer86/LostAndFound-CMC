@@ -19,13 +19,20 @@
 .trust-rating-total span{font-size:11px;color:#b6d3d1}
 .trust-review-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;text-align:left}
 .trust-review-card{background:#fff;border-radius:13px;color:#203c49;padding:19px;display:flex;flex-direction:column;min-width:0}
+.trust-review-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .trust-review-stars{display:flex;gap:3px;color:#e3a92c}
-.trust-review-comment{font-size:13px;line-height:1.7;overflow-wrap:anywhere;white-space:pre-line;margin:13px 0 16px;flex:1}
-.trust-review-meta{display:grid;gap:8px;border-top:1px solid #e6eff0;padding-top:13px;font-size:11px;color:#177a6d;font-weight:800}
-.trust-review-meta span{display:flex;align-items:center;gap:5px}
-.trust-review-meta small{font-size:11px;color:#68818c;font-weight:500}
-.trust-review-author{overflow-wrap:anywhere}
-.trust-review-author time{display:block;margin-top:4px;font-size:10px;color:#8ca0aa}
+.trust-review-date{font-size:11px;color:#8ca0aa;white-space:nowrap;font-weight:500}
+.trust-review-comment{font-size:13px;line-height:1.7;overflow-wrap:anywhere;white-space:pre-line;margin:15px 0 18px;flex:1}
+.trust-review-meta{display:grid;gap:11px;border-top:1px solid #e6eff0;padding-top:13px}
+.trust-review-verified{display:inline-flex;align-items:center;gap:6px;color:#168477;font-size:11px;font-weight:750}
+.trust-review-verified svg{flex-shrink:0}
+.trust-review-author{display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;min-width:0}
+.trust-review-author>strong{font-size:12.5px;line-height:1.5;font-weight:750;color:#203c49;overflow-wrap:anywhere}
+.trust-review-role{display:inline-flex;align-items:center;border-radius:99px;padding:3px 9px;background:#e7f6f1;color:#147968;font-size:10.5px;line-height:1.5;font-weight:700;white-space:nowrap}
+.trust-review-post{display:flex;align-items:flex-start;gap:8px;background:#f4f8f9;border:1px solid #e8eff1;border-radius:9px;padding:9px 10px;min-width:0}
+.trust-review-post svg{flex-shrink:0;margin-top:2px;color:#66818f}
+.trust-review-post span{color:#728894;font-size:11px;line-height:1.55;overflow-wrap:anywhere;min-width:0}
+.trust-review-post strong{color:#344f5e;font-weight:700}
 .trust-empty{margin:0;background:#ffffff10;border:1px dashed #6e9698;border-radius:12px;padding:20px;text-align:center;color:#dbebed;font-size:13px;line-height:1.75}
 .trust-empty button{background:none;border:0;color:#86ebda;text-decoration:underline;font-weight:800}
 .trust-review-form{display:grid;gap:14px;margin-top:20px;border-top:1px solid #497079;padding-top:22px;text-align:left;max-width:650px}
@@ -51,3 +58,12 @@
 @media(max-width:1060px){.trust-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:850px){.trust-review-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.trust-intro{align-items:flex-start;flex-direction:column}.trust-stats{gap:9px}.trust-stats div{flex-direction:column;align-items:flex-start;gap:7px}}
 @media(max-width:600px){.trust{padding:36px 0 48px}.trust-intro{gap:17px}.trust-reviews{padding:20px 16px;border-radius:15px}.trust-reviews-head{align-items:stretch;flex-direction:column}.trust-rating-total{text-align:left}.trust-rating-total strong{justify-content:flex-start}.trust-stats{grid-template-columns:1fr}.trust-stats div{flex-direction:row;align-items:center}.trust-review-grid,.trust-grid{grid-template-columns:1fr}.trust .btn.trust-link{white-space:normal}.trust-note{align-items:flex-start}}
+
+/* Keep public feedback compact even after hundreds of verified reviews. */
+.trust-review-pagination{display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;margin-top:19px;color:#b9d2d3;font-size:12px}
+.trust-review-pagination .btn{border-color:#7ebeb6;color:#fff;background:transparent;min-height:40px}
+.trust-review-pagination .btn:hover{background:#ffffff1a}
+.trust-review-card{max-width:100%;overflow:hidden}
+.trust-review-comment{min-width:0;overflow-wrap:anywhere}
+.trust-review-post strong{overflow-wrap:anywhere}
+@media(max-width:600px){.trust-review-pagination{flex-direction:column;gap:10px}}

@@ -237,6 +237,6 @@ public class HandoversController(LostFoundDb db) : ControllerBase
             Push(other,access.Found.Id,$"Đối phương đã xác nhận bàn giao {access.Found.ItemName}. Vui lòng xác nhận sau khi thực sự giao/nhận đồ.","HANDOVER");
         }
         await db.SaveChangesAsync();await tx.CommitAsync();
-        return Ok(new{message=access.Room.Status=="COMPLETED"?"Cả hai đã xác nhận. Vụ việc hoàn tất.":"Đã ghi nhận xác nhận của bạn. Đang chờ đối phương."});
+        return Ok(new{message=access.Room.Status=="COMPLETED"?"Cả hai đã xác nhận. Vụ việc hoàn tất.":"Đã ghi nhận xác nhận của bạn. Đang chờ đối phương.",completed=access.Room.Status=="COMPLETED"});
     }
 }

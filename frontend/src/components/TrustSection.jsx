@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, GraduationCap, LockKeyhole, MessagesSquare, CheckCheck, Flag, ArrowRight, Star, BadgeCheck, MessageSquareQuote } from 'lucide-react';
+import { ShieldCheck, GraduationCap, LockKeyhole, MessagesSquare, CheckCheck, Flag, ArrowRight, Star, BadgeCheck, MessageSquareQuote, Package } from 'lucide-react';
 import './trustSection.css';
 
 // Descriptions reflect actual product controls; public feedback is never hardcoded.
@@ -18,6 +18,8 @@ export default function TrustSection({ onSafety, me }) {
   const [stats, setStats] = useState(null);
   const [reviews, setReviews] = useState({ count: 0, average: null, items: [] });
   const [reviewLoad, setReviewLoad] = useState('loading');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState('');
   const [eligible, setEligible] = useState([]);
   const [room, setRoom] = useState('');
   const [stars, setStars] = useState(5);
@@ -26,10 +28,29 @@ export default function TrustSection({ onSafety, me }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const loadReviews = () => fetch('/api/reviews/public', { credentials: 'omit' })
-    .then((r) => { if (!r.ok) throw new Error('Không tải được đánh giá'); return r.json(); })
-    .then((data) => { setReviews(data); setReviewLoad('ready'); })
-    .catch(() => setReviewLoad('error'));
+  // Only the newest page 1 reload can replace the list; subsequent pages append.
+  const loadReviews = async () => {
+    try {
+      const response = await fetch('/api/reviews/public?page=1', { credentials: 'omit' });
+      if (!response.ok) throw new Error('Không tải được đánh giá');
+      const data = await response.json();
+      setReviews(data);
+      setReviewLoad('ready');
+    } catch { setReviewLoad('error'); }
+  };
+  const loadMoreReviews = async () => {
+    if (loadingMore || reviews.items.length >= reviews.count) return;
+    setLoadingMore(true);
+    setMoreError('');
+    try {
+      const nextPage = (reviews.page || 1) + 1;
+      const response = await fetch(`/api/reviews/public?page=${nextPage}`, { credentials: 'omit' });
+      if (!response.ok) throw new Error('Không tải thêm được đánh giá.');
+      const data = await response.json();
+      setReviews(previous => ({ ...data, items: [...previous.items, ...data.items] }));
+    } catch { setMoreError('Không tải thêm được đánh giá. Vui lòng thử lại.'); }
+    finally { setLoadingMore(false); }
+  };
 
   useEffect(() => {
     let active = true;
@@ -113,20 +134,34 @@ export default function TrustSection({ onSafety, me }) {
           {reviewLoad === 'ready' && reviews.items.length === 0 && <p className="trust-empty">Chưa có đánh giá từ các lần bàn giao hoàn tất. Các nhận xét thực tế sẽ xuất hiện tại đây khi có người chia sẻ.</p>}
           {reviewLoad === 'ready' && reviews.items.length > 0 && <div className="trust-review-grid">
             {reviews.items.map((item, index) => <article className="trust-review-card" key={`${item.createdAt}-${index}`}>
-              <div className="trust-review-stars" aria-label={`${item.rating} trên 5 sao`}>
-                {Array.from({ length: 5 }, (_, i) => <Star key={i} size={16} fill={i < item.rating ? 'currentColor' : 'none'} />)}
+              <div className="trust-review-top">
+                <div className="trust-review-stars" aria-label={`${item.rating} trên 5 sao`}>
+                  {Array.from({ length: 5 }, (_, i) => <Star key={i} size={16} fill={i < item.rating ? 'currentColor' : 'none'} />)}
+                </div>
+                <time className="trust-review-date" dateTime={item.createdAt}>{shortDate(item.createdAt)}</time>
               </div>
               <p className="trust-review-comment">“{item.comment}”</p>
               <div className="trust-review-meta">
-                <span><BadgeCheck size={16} /> Đã bàn giao thành công</span>
-                <small className="trust-review-author">
-                  {item.username?.trim() || 'Thành viên Foundly'} - {item.participantRole}
-                  <time dateTime={item.createdAt}>{shortDate(item.createdAt)}</time>
-                </small>
+                <span className="trust-review-verified"><BadgeCheck size={16} /> Đã bàn giao thành công</span>
+                <div className="trust-review-author">
+                  <strong>{item.fullName?.trim() || 'Thành viên Foundly'}</strong>
+                  <span className="trust-review-role">{item.participantRole || 'Thành viên'}</span>
+                </div>
+                <div className="trust-review-post">
+                  <Package size={15} aria-hidden="true" />
+                  <span>Bài đăng: <strong>{item.itemName?.trim() || 'Đồ vật đã bàn giao'}</strong></span>
+                </div>
               </div>
             </article>)}
           </div>}
+          {reviewLoad === 'ready' && reviews.items.length > 0 && <div className="trust-review-pagination">
+            <span>Đang hiển thị {fmt(reviews.items.length)} / {fmt(reviews.count)} đánh giá</span>
+            {reviews.items.length < reviews.count && <button type="button" className="btn outline" onClick={loadMoreReviews} disabled={loadingMore}>
+              {loadingMore ? 'Đang tải…' : 'Xem thêm đánh giá'}
+            </button>}
+          </div>}
 
+          {moreError && <p className="trust-form-error" role="alert">{moreError}</p>}
           {me && eligible.length > 0 && <form className="trust-review-form" onSubmit={submitReview}>
             <h4>Chia sẻ trải nghiệm bàn giao của bạn</h4>
             <label>Chọn lần bàn giao đã hoàn tất
