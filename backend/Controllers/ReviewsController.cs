@@ -11,7 +11,7 @@ namespace LostFound.Api.Controllers;
 public record SubmitFoundlyReview(Guid HandoverRoomId, int Rating, string? Comment);
 
 // Reviews can only come from either participant of a COMPLETED handover.
-// Public responses do not include stored user identities, email fields, private evidence, or case IDs.
+// Public responses include the reviewer display name but never IDs, email, private evidence, or case IDs.
 [ApiController, Route("api/reviews")]
 public class ReviewsController(LostFoundDb db) : ControllerBase
 {
@@ -21,10 +21,21 @@ public class ReviewsController(LostFoundDb db) : ControllerBase
         var approved = db.PublicReviews.AsNoTracking().Where(r => r.IsVisible);
         var count = await approved.CountAsync();
         var average = count == 0 ? (double?)null : Math.Round(await approved.AverageAsync(r => (double)r.Rating), 1);
-        var items = await approved.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
-            .Take(6)
-            .Select(r => new { r.Rating, r.Comment, r.CreatedAt, r.ParticipantRole })
-            .ToListAsync();
+        // Only expose the reviewer's display name; never return their email or user ID.
+        // Map old stored role labels too, so existing reviews show the requested wording.
+        var items = await (from review in approved
+            join reviewer in db.Users.AsNoTracking() on review.ReviewerId equals reviewer.Id
+            orderby review.CreatedAt descending, review.Id descending
+            select new
+            {
+                review.Rating,
+                review.Comment,
+                review.CreatedAt,
+                username = reviewer.FullName,
+                participantRole = review.ParticipantRole == "Người nhận đồ" ? "Người mất"
+                    : review.ParticipantRole == "Người nhặt được" ? "Người nhặt"
+                    : review.ParticipantRole
+            }).Take(6).ToListAsync();
         return Ok(new { count, average, items });
     }
 
@@ -59,7 +70,7 @@ public class ReviewsController(LostFoundDb db) : ControllerBase
             where room.Id == request.HandoverRoomId && room.Status == "COMPLETED"
                 && room.CompletedAt != null && claim.HandedOverAt != null
                 && (claim.ClaimantId == userId || report.UserId == userId)
-            select new { participantRole = claim.ClaimantId == userId ? "Người nhận đồ" : "Người nhặt được" })
+            select new { participantRole = claim.ClaimantId == userId ? "Người mất" : "Người nhặt" })
             .FirstOrDefaultAsync();
         if (handover is null) return Forbid();
         if (await db.PublicReviews.AnyAsync(r => r.HandoverRoomId == request.HandoverRoomId && r.ReviewerId == userId))

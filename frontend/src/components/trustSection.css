@@ -24,6 +24,8 @@
 .trust-review-meta{display:grid;gap:8px;border-top:1px solid #e6eff0;padding-top:13px;font-size:11px;color:#177a6d;font-weight:800}
 .trust-review-meta span{display:flex;align-items:center;gap:5px}
 .trust-review-meta small{font-size:11px;color:#68818c;font-weight:500}
+.trust-review-author{overflow-wrap:anywhere}
+.trust-review-author time{display:block;margin-top:4px;font-size:10px;color:#8ca0aa}
 .trust-empty{margin:0;background:#ffffff10;border:1px dashed #6e9698;border-radius:12px;padding:20px;text-align:center;color:#dbebed;font-size:13px;line-height:1.75}
 .trust-empty button{background:none;border:0;color:#86ebda;text-decoration:underline;font-weight:800}
 .trust-review-form{display:grid;gap:14px;margin-top:20px;border-top:1px solid #497079;padding-top:22px;text-align:left;max-width:650px}

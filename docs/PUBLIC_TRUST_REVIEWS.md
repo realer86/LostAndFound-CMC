@@ -7,7 +7,7 @@
 - Người dùng đã đăng nhập chỉ thấy biểu mẫu gửi đánh giá khi có ít nhất một phòng bàn giao đã hoàn tất mà họ tham gia và chưa đánh giá.
 
 ## API
-- `GET /api/reviews/public` — công khai; trả `count`, `average` (null nếu chưa có), `items` tối đa 6 bản ghi mới nhất. Không trả `ReviewerId`, `HandoverRoomId`, email hoặc nội dung bằng chứng.
+- `GET /api/reviews/public` — công khai; trả `count`, `average` (null nếu chưa có), `items` tối đa 6 bản ghi mới nhất. Trả thêm `username` (hiện dùng trường `FullName` của tài khoản) và `participantRole` chuẩn hóa thành `Người nhặt` / `Người mất`; không trả `ReviewerId`, `HandoverRoomId`, email hoặc nội dung bằng chứng. Đánh giá cũ vẫn hiển thị vai trò mới qua phép ánh xạ khi đọc, không cần sửa dữ liệu.
 - `GET /api/reviews/eligible` — yêu cầu đăng nhập; trả những phòng bàn giao hợp lệ của tài khoản hiện tại chưa đánh giá.
 - `POST /api/reviews` — yêu cầu đăng nhập. JSON: `{"handoverRoomId":"uuid","rating":5,"comment":"Trải nghiệm trả đồ thuận lợi"}`. Giới hạn 1–5 sao và nhận xét 10–500 ký tự. Chỉ hai phía của một lần bàn giao có `Status=COMPLETED`, `CompletedAt` và `HandedOverAt` mới được đánh giá. Mỗi người chỉ đánh giá một lần cho mỗi phòng.
 
@@ -19,3 +19,8 @@
 - Để kiểm tra đánh giá có thật: hoàn thành bàn giao bằng cả hai tài khoản, đăng nhập một tài khoản, vào trang chủ và điền form. Sau đó mở tab ẩn danh để kiểm tra đánh giá mới xuất hiện.
 
 Lưu ý: nhận xét là nội dung do thành viên cung cấp và đang được công khai ngay sau khi gửi; trước khi đưa lên môi trường production cần thêm quy trình kiểm duyệt và xử lý nội dung vi phạm. Không sử dụng EnsureCreated + SQL script như giải pháp migration production lâu dài.
+
+## Hiển thị tên người đánh giá
+- Dòng đánh giá có dạng `Tên hiển thị - Người nhặt` hoặc `Tên hiển thị - Người mất`; ngày đánh giá ở dòng dưới.
+- Hệ thống hiện chưa có trường username riêng, nên sử dụng `AppUser.FullName`. Tên này sẽ **công khai cả khi chưa đăng nhập**; nếu cần bảo vệ danh tính, nên bổ sung biệt danh công khai hoặc lựa chọn ẩn tên trước khi triển khai.
+- Không cần migration hay xóa PostgreSQL để hiển thị trường này.

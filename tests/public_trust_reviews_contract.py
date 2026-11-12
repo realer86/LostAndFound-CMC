@@ -16,7 +16,14 @@ assert 'room.Status == "COMPLETED"' in api
 assert 'claim.HandedOverAt != null' in api
 assert 'claim.ClaimantId == userId || report.UserId == userId' in api
 assert 'r.HandoverRoomId == request.HandoverRoomId && r.ReviewerId == userId' in api
-assert 'new { r.Rating, r.Comment, r.CreatedAt, r.ParticipantRole }' in api
+assert 'join reviewer in db.Users.AsNoTracking() on review.ReviewerId equals reviewer.Id' in api
+assert 'username = reviewer.FullName' in api
+assert 'claim.ClaimantId == userId ? "Người mất" : "Người nhặt"' in api
+assert 'review.ParticipantRole == "Người nhận đồ" ? "Người mất"' in api
+assert 'review.ParticipantRole == "Người nhặt được" ? "Người nhặt"' in api
+assert "item.username?.trim() || 'Thành viên Foundly'" in ui
+assert '{item.participantRole}' in ui
+assert 'className="trust-review-author"' in ui
 assert 'api/reviews/public' in ui and "credentials: 'omit'" in ui
 assert 'reviews.items.length === 0' in ui
 assert 'Chưa có đánh giá' in ui

@@ -117,7 +117,13 @@ export default function TrustSection({ onSafety, me }) {
                 {Array.from({ length: 5 }, (_, i) => <Star key={i} size={16} fill={i < item.rating ? 'currentColor' : 'none'} />)}
               </div>
               <p className="trust-review-comment">“{item.comment}”</p>
-              <div className="trust-review-meta"><span><BadgeCheck size={16} /> Đã bàn giao thành công</span><small>{item.participantRole} · {shortDate(item.createdAt)}</small></div>
+              <div className="trust-review-meta">
+                <span><BadgeCheck size={16} /> Đã bàn giao thành công</span>
+                <small className="trust-review-author">
+                  {item.username?.trim() || 'Thành viên Foundly'} - {item.participantRole}
+                  <time dateTime={item.createdAt}>{shortDate(item.createdAt)}</time>
+                </small>
+              </div>
             </article>)}
           </div>}
 
