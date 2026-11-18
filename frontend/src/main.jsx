@@ -32,7 +32,7 @@ function App(){
   const [me,setMe]=useState(null),[page,setPage]=useState('discover'),[filter,setFilter]=useState('ALL'),[search,setSearch]=useState('');
   const [reports,setReports]=useState([]),[mine,setMine]=useState([]),[catalog,setCatalog]=useState({categories:[],locations:[]});
   const [selected,setSelected]=useState(null),[showAuth,setShowAuth]=useState(false),[authInitialMode,setAuthInitialMode]=useState('login'),[showPost,setShowPost]=useState(false),[editingReport,setEditingReport]=useState(null),[reportPage,setReportPage]=useState(1);
-  const [notifications,setNotifications]=useState([]),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null),[matchingLoading,setMatchingLoading]=useState(false);
+  const [notifications,setNotifications]=useState([]),[matchingUnread,setMatchingUnread]=useState(0),[matches,setMatches]=useState([]),[selectedMine,setSelectedMine]=useState(null),[matchingLoading,setMatchingLoading]=useState(false);
   const [myClaims,setMyClaims]=useState([]),[inbox,setInbox]=useState([]);
   const [selectedClaimRoom,setSelectedClaimRoom]=useState(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null),[mobileNav,setMobileNav]=useState(false),[count,setCount]=useState(0);
@@ -43,16 +43,16 @@ function App(){
   const request=async(fn)=>{setBusy(true);try{await fn();}catch(err){notify(err.message,true);}finally{setBusy(false);}};
   const loadReports=async(index=1)=>{const requestId=++reportsRequestRef.current;const result=await api(`/reports?type=${filter==='ALL'?'':filter}&q=${encodeURIComponent(search)}&page=${index}`);if(requestId!==reportsRequestRef.current)return;setReports(previous=>index===1?result.items:[...previous,...result.items]);setCount(result.total);setReportPage(index)};
   const loadMine=async()=>{if(!me)return;const session=sessionKeyRef.current;const items=await api('/reports/mine');if(session===sessionKeyRef.current)setMine(items);};
-  const loadNotifs=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const items=await api('/notifications');if(session===sessionKeyRef.current)setNotifications(items);};
+  const loadNotifs=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const [items,matchStats]=await Promise.all([api('/notifications'),api('/notifications/matches/unread').catch(()=>({count:0}))]);if(session===sessionKeyRef.current){setNotifications(items);setMatchingUnread(matchStats.count||0);}};
   const loadClaims=async()=>{if(!fullBackend||!me)return;const session=sessionKeyRef.current;const [a,b]=await Promise.all([api('/claims/mine'),api('/claims/inbox')]);if(session===sessionKeyRef.current){setMyClaims(a);setInbox(b);}};
   const refresh=async()=>{await Promise.all(fullBackend?[loadReports(),loadMine(),loadNotifs(),loadClaims()]:[loadReports(),loadMine()].filter(Boolean))};
   useEffect(()=>{api('/auth/me').then(data=>setMe(data.user)).catch(()=>{});api('/reports/catalog').then(setCatalog).catch(()=>{});},[]);
   useEffect(()=>{loadReports().catch(err=>notify(err.message,true))},[filter,search]);
-  useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);matchingRequestRef.current++;setSelectedMine(null);setNotifications([]);setMyClaims([]);setInbox([]);}},[me]);
+  useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);matchingRequestRef.current++;setSelectedMine(null);setNotifications([]);setMatchingUnread(0);setMyClaims([]);setInbox([]);}},[me]);
   useEffect(()=>{
     if(!fullBackend||!me?.id)return;
     let active=true;
-    const check=async()=>{try{const items=await api('/notifications');if(active)setNotifications(items);}catch{}};
+    const check=async()=>{try{const [items,matchStats]=await Promise.all([api('/notifications'),api('/notifications/matches/unread').catch(()=>({count:0}))]);if(active){setNotifications(items);setMatchingUnread(matchStats.count||0);}}catch{}};
     const timer=setInterval(check,12000);
     return ()=>{active=false;clearInterval(timer);};
   },[me?.id]);
@@ -76,7 +76,10 @@ function App(){
     goto('matching');
     try {
       const results=await api(`/reports/${id}/matches?minScore=50&limit=10`);
-      if(requestId===matchingRequestRef.current)setMatches(results.matches || []);
+      if(requestId===matchingRequestRef.current){
+        setMatches(results.matches || []);
+        api(`/notifications/matches/${id}/read`,{method:'PATCH'}).then(()=>loadNotifs()).catch(()=>{});
+      }
     } catch(err) {
       if(requestId===matchingRequestRef.current)notify(err.message,true);
     } finally {
@@ -88,7 +91,7 @@ function App(){
   const logout=()=>request(async()=>{
     await api('/auth/logout',{method:'POST'});
     sessionKeyRef.current++;matchingRequestRef.current++;
-    setMe(null);setNotifications([]);setMine([]);setMatches([]);setSelectedMine(null);
+    setMe(null);setNotifications([]);setMatchingUnread(0);setMine([]);setMatches([]);setSelectedMine(null);
     setMyClaims([]);setInbox([]);
     setSelected(null);setShowAuth(false);setShowPost(false);setEditingReport(null);
     setSearch('');setFilter('ALL');goto('discover');notify('Đã đăng xuất. Bạn có thể đăng nhập tài khoản khác.');
@@ -99,7 +102,7 @@ function App(){
       <nav className={'nav '+(mobileNav?'navopen':'')}>
         <button className={page==='discover'?'active':''} onClick={()=>goto('discover')}>Khám phá</button>
         <button className={page==='mine'?'active':''} onClick={()=>me?goto('mine'):openAuth()}>Bài của tôi</button>
-        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp</button>
+        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp{fullBackend&&matchingUnread>0&&<span className="soon-label">{matchingUnread}</span>}</button>
         <button className={page==='claims'||page==='upcoming-claims'?'active':''} onClick={()=>gotoFeature('claims')}>Yêu cầu nhận đồ{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='operations'||page==='upcoming-operations'?'active':''} onClick={()=>gotoFeature('operations')}>Hỗ trợ & ký gửi{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
@@ -113,7 +116,7 @@ function App(){
         </div>
       </nav>
       <div className="topactions">
-        {me&&<button className={'iconbutton notificationbutton '+(page==='notifications'?'selected':'')} title={fullBackend?'Thông báo':'Thông báo · Sắp có'} aria-label="Thông báo" onClick={()=>gotoFeature('notifications')}><Bell size={19}/>{fullBackend&&notifications.some(x=>!x.isRead)&&<i className="dot"/>}</button>}
+        {me&&<button className={'iconbutton notificationbutton '+(page==='notifications'?'selected':'')} title={fullBackend?'Thông báo':'Thông báo · Sắp có'} aria-label="Thông báo" onClick={()=>gotoFeature('notifications')}><Bell size={19}/>{fullBackend&&notifications.some(x=>x.type==='MESSAGE'&&!x.isRead)&&<i className="dot"/>}</button>}
         <button className="btn primary topnew" onClick={()=>openPost('LOST')}><Plus size={17}/> Đăng tin</button>
         {me?<>
           <button className="userchip" onClick={()=>goto('mine')} title={`Tài khoản: ${me.fullName}`}><span className="avatar">{me.fullName.slice(0,1).toUpperCase()}</span><span className="userlabel">{me.fullName.split(' ').slice(-2).join(' ')}</span></button>
