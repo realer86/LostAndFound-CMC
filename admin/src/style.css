@@ -8,3 +8,4 @@
 .password-field input{width:100%;padding-right:44px!important}
 .password-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#6c7d8c;width:32px;height:32px;border-radius:8px;display:grid;place-items:center;padding:0;cursor:pointer}
 .password-toggle:hover{background:#eaf7f4;color:#129d8a}
+.side-unread-dot{position:absolute;right:13px;top:17px;width:9px;height:9px;background:#e11d48;border:1px solid #fff;border-radius:50%;box-shadow:0 0 0 1px #e11d4833}

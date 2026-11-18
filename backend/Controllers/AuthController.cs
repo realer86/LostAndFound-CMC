@@ -49,7 +49,8 @@ public class AuthController(
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.FullName),
-            new(ClaimTypes.Role, user.Role)
+            new(ClaimTypes.Role, user.Role),
+            new("foundly:session-version", user.SessionVersion.ToString())
         };
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
             new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)),
@@ -271,71 +272,145 @@ public class AuthController(
             return Ok(new { user = PublicUser(user) });
         }
     }
-[HttpPost("forgot-password"), EnableRateLimiting("auth")]
+    private static readonly object RecoveryResponse = new
+    {
+        message = "Nếu tài khoản hợp lệ, mã OTP đặt lại mật khẩu sẽ được gửi đến email trường. Vui lòng kiểm tra hộp thư."
+    };
+
+    private const string InvalidResetCode = "Mã OTP không hợp lệ hoặc đã hết hạn. Có thể yêu cầu gửi lại mã.";
+
+    [HttpPost("forgot-password"), EnableRateLimiting("password-recovery")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest req, CancellationToken cancellationToken)
     {
         var email = Normalize(req.Email);
-        if (!Allowed(email)) return BadSchoolEmail();
-        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
-        if (user is null)
-            return Ok(new { message = "Nếu tài khoản tồn tại, mã OTP đặt lại mật khẩu đã được gửi đến email trường." });
-        if (user.OtpSentAt.HasValue && user.OtpSentAt > DateTime.UtcNow.AddSeconds(-60))
-            return StatusCode(429, new { message = "Vui lòng chờ 60 giây trước khi yêu cầu OTP khác." });
+        // The public reply is deliberately indistinguishable for unknown, unverified,
+        // cooling-down and temporarily blocked accounts.
+        if (!Allowed(email)) return Ok(RecoveryResponse);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // PostgreSQL row lock serializes requests for the same account. It prevents
+        // concurrent resends bypassing per-account limits.
+        var locked = await db.Users.FromSqlInterpolated(
+            $"SELECT * FROM \"Users\" WHERE \"Email\" = {email} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        var user = locked.SingleOrDefault();
+        if (user is null || user.EmailVerifiedAt is null ||
+            (user.SuspendedUntil.HasValue && user.SuspendedUntil > DateTime.UtcNow))
+            return Ok(RecoveryResponse);
+
+        var now = DateTime.UtcNow;
+        var ticket = await db.PasswordResetTickets.FirstOrDefaultAsync(x => x.UserId == user.Id, cancellationToken);
+        if (ticket is null)
+        {
+            ticket = new PasswordResetTicket { UserId = user.Id };
+            db.PasswordResetTickets.Add(ticket);
+        }
+        if (now - ticket.RequestWindowStartedAt >= TimeSpan.FromHours(1))
+        {
+            ticket.RequestWindowStartedAt = now;
+            ticket.RequestsInWindow = 0;
+        }
+        if (now - ticket.DailyWindowStartedAt >= TimeSpan.FromDays(1))
+        {
+            ticket.DailyWindowStartedAt = now;
+            ticket.RequestsToday = 0;
+        }
+        if (now - ticket.FailedWindowStartedAt >= TimeSpan.FromHours(1))
+        {
+            ticket.FailedWindowStartedAt = now;
+            ticket.FailedAttemptsInWindow = 0;
+        }
+        if ((ticket.SentAt.HasValue && ticket.SentAt.Value > now.AddSeconds(-60)) ||
+            ticket.RequestsInWindow >= 3 || ticket.RequestsToday >= 10 ||
+            ticket.FailedAttemptsInWindow >= 10)
+            return Ok(RecoveryResponse);
 
         var code = NewCode();
-        try { await sender.SendAsync(email, code, cancellationToken); }
+        // Sending before commit avoids storing a newly generated, undelivered OTP.
+        // A failure is only logged server-side to avoid exposing account existence.
+        try
+        {
+            await sender.SendAsync(email, code, cancellationToken, OtpEmailPurpose.ResetPassword);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning("Password reset OTP delivery failed ({ErrorType})", ex.GetType().Name);
-            return StatusCode(503, new { message = "Chưa gửi được OTP. Kiểm tra cấu hình SMTP hoặc thử lại sau." });
+            logger.LogWarning("Password recovery email delivery failed ({ErrorType})", ex.GetType().Name);
+            return Ok(RecoveryResponse);
         }
-        user.VerifyTokenHash = passwords.HashPassword(user, code);
-        user.VerifyExpiresAt = DateTime.UtcNow.AddMinutes(10);
-        user.OtpSentAt = DateTime.UtcNow;
-        user.OtpAttemptCount = 0;
+        ticket.TokenHash = passwords.HashPassword(user, code);
+        ticket.ExpiresAt = now.AddMinutes(10);
+        ticket.SentAt = now;
+        ticket.FailedAttempts = 0;
+        ticket.RequestsInWindow++;
+        ticket.RequestsToday++;
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new
-        {
-            message = sender.IsDevelopmentCodeEnabled ? "Mã OTP đặt lại mật khẩu thử nghiệm đã tạo." : "Nếu tài khoản tồn tại, mã OTP đặt lại mật khẩu đã được gửi đến email trường.",
-            devVerificationCode = sender.IsDevelopmentCodeEnabled ? code : null
-        });
+        await transaction.CommitAsync(cancellationToken);
+        return Ok(RecoveryResponse);
     }
 
-    [HttpPost("reset-password"), EnableRateLimiting("auth")]
+    [HttpPost("reset-password"), EnableRateLimiting("password-recovery")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest req, CancellationToken cancellationToken)
     {
         var email = Normalize(req.Email);
-        if (!Allowed(email)) return BadSchoolEmail();
-        if (req.NewPassword is null || req.NewPassword.Length < 10 || req.NewPassword.Length > 128)
-            return BadRequest(new { message = "Mật khẩu mới cần 10–128 ký tự." });
-        var user = await db.Users.FirstOrDefaultAsync(x => x.Email == email, cancellationToken);
-        if (user is null || user.VerifyTokenHash is null || user.VerifyExpiresAt <= DateTime.UtcNow ||
-            user.OtpAttemptCount >= 5 || req.Code is null || req.Code.Length != 6 || !req.Code.All(char.IsAsciiDigit))
-            return BadRequest(new { message = "Mã OTP không hợp lệ hoặc đã hết hạn. Có thể yêu cầu gửi lại mã." });
+        // The password policy only applies to password recovery (existing registration remains unchanged).
+        if (req.NewPassword is null || req.NewPassword.Length is < 12 or > 128)
+            return BadRequest(new { message = "Mật khẩu mới cần 12–128 ký tự." });
+        if (!Allowed(email) || req.Code is null || req.Code.Length != 6 || !req.Code.All(char.IsAsciiDigit))
+            return BadRequest(new { message = InvalidResetCode });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var locked = await db.Users.FromSqlInterpolated(
+            $"SELECT * FROM \"Users\" WHERE \"Email\" = {email} FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        var user = locked.SingleOrDefault();
+        if (user is null || user.EmailVerifiedAt is null)
+            return BadRequest(new { message = InvalidResetCode });
+
+        var ticket = await db.PasswordResetTickets.FirstOrDefaultAsync(x => x.UserId == user.Id, cancellationToken);
+        var now = DateTime.UtcNow;
+        if (ticket is null || ticket.TokenHash is null || ticket.ExpiresAt <= now ||
+            ticket.FailedAttempts >= 5 ||
+            (ticket.FailedAttemptsInWindow >= 10 && now - ticket.FailedWindowStartedAt < TimeSpan.FromHours(1)))
+            return BadRequest(new { message = InvalidResetCode });
 
         PasswordVerificationResult verified;
-        try { verified = passwords.VerifyHashedPassword(user, user.VerifyTokenHash, req.Code); }
+        try { verified = passwords.VerifyHashedPassword(user, ticket.TokenHash, req.Code); }
         catch (FormatException) { verified = PasswordVerificationResult.Failed; }
         if (verified == PasswordVerificationResult.Failed)
         {
-            user.OtpAttemptCount++;
-            if (user.OtpAttemptCount >= 5)
+            if (now - ticket.FailedWindowStartedAt >= TimeSpan.FromHours(1))
             {
-                user.VerifyTokenHash = null;
-                user.VerifyExpiresAt = null;
+                ticket.FailedWindowStartedAt = now;
+                ticket.FailedAttemptsInWindow = 0;
+            }
+            ticket.FailedAttempts++;
+            ticket.FailedAttemptsInWindow++;
+            if (ticket.FailedAttempts >= 5)
+            {
+                ticket.TokenHash = null;
+                ticket.ExpiresAt = null;
             }
             await db.SaveChangesAsync(cancellationToken);
-            return BadRequest(new { message = "Mã OTP không hợp lệ hoặc đã hết hạn. Có thể yêu cầu gửi lại mã." });
+            await transaction.CommitAsync(cancellationToken);
+            return BadRequest(new { message = InvalidResetCode });
         }
+
         user.PasswordHash = passwords.HashPassword(user, req.NewPassword);
-        user.EmailVerifiedAt ??= DateTime.UtcNow;
-        user.VerifyTokenHash = null;
-        user.VerifyExpiresAt = null;
-        user.OtpAttemptCount = 0;
+        user.SessionVersion++; // Reject previously issued normal and admin cookies.
+        ticket.TokenHash = null; // One-time use: atomic with password change.
+        ticket.ExpiresAt = null;
+        ticket.FailedAttempts = 0;
+        // Non-sensitive audit record. Never log the OTP or the new password.
+        db.AuditLogs.Add(new AuditLog
+        {
+            ActorId = user.Id, Action = "PASSWORD_RESET", TargetType = "USER", TargetId = user.Id
+        });
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "Đặt lại mật khẩu thành công. Bạn có thể đăng nhập bằng mật khẩu mới." });
+        await transaction.CommitAsync(cancellationToken);
+        await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        return Ok(new { message = "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại trên các thiết bị." });
     }
-    
+
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {

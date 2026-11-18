@@ -6,11 +6,15 @@ CREATE TABLE IF NOT EXISTS "SupportThreads" (
   "CaseId" uuid NULL REFERENCES "CaseTickets"("Id") ON DELETE RESTRICT,
   "CustodyId" uuid NULL REFERENCES "CustodyRecords"("Id") ON DELETE RESTRICT,
   "Department" varchar(20) NOT NULL,
+  "UserLastReadAt" timestamptz NOT NULL DEFAULT now(),
+  "StaffLastReadAt" timestamptz NOT NULL DEFAULT now(),
   "CreatedAt" timestamptz NOT NULL,
   "LastMessageAt" timestamptz NOT NULL,
   CONSTRAINT "CK_SupportThreads_Source" CHECK (("CaseId" IS NOT NULL) <> ("CustodyId" IS NOT NULL)),
   CONSTRAINT "CK_SupportThreads_Department" CHECK ("Department" IN ('ADMIN','SECURITY','LIBRARY','DORM'))
 );
+ALTER TABLE "SupportThreads" ADD COLUMN IF NOT EXISTS "UserLastReadAt" timestamptz NOT NULL DEFAULT now();
+ALTER TABLE "SupportThreads" ADD COLUMN IF NOT EXISTS "StaffLastReadAt" timestamptz NOT NULL DEFAULT now();
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_SupportThreads_CaseId" ON "SupportThreads"("CaseId");
 CREATE UNIQUE INDEX IF NOT EXISTS "IX_SupportThreads_CustodyId" ON "SupportThreads"("CustodyId");
 CREATE INDEX IF NOT EXISTS "IX_SupportThreads_UserId_LastMessageAt" ON "SupportThreads"("UserId","LastMessageAt");

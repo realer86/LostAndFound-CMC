@@ -31,17 +31,17 @@ public class MatchingController(LostFoundDb db) : ControllerBase
             return Ok(new { reportId = id, threshold = minScore, matches = Array.Empty<object>() });
 
         var opposite = source.Type == "LOST" ? "FOUND" : "LOST";
-        // For the coursework-scale dataset, calculate on demand; don't mutate the DB.
-        // A capped candidate window avoids unbounded in-memory evaluation.
         var candidates = await db.Reports.AsNoTracking()
             .Include(x => x.Location).Include(x => x.Category).Include(x => x.Images)
             .Where(x => x.Type == opposite && x.Status == "OPEN" && x.UserId != userId)
             .OrderByDescending(x => x.EventTime).Take(1000).ToListAsync(cancellationToken);
 
-        var matches = candidates.Select(report => new { report, result = ReportMatchingService.Evaluate(source, report) })
+        var scored = candidates.Select(report => new { report, result = ReportMatchingService.Evaluate(source, report) })
             .Where(x => x.result.Score >= minScore)
             .OrderByDescending(x => x.result.Score).ThenByDescending(x => x.result.Coverage)
-            .ThenByDescending(x => x.report.EventTime).Take(limit)
+            .ThenByDescending(x => x.report.EventTime).Take(limit).ToList();
+        await MatchNotificationService.RecordAsync(db, source, scored.Select(x => x.report), cancellationToken);
+        var matches = scored
             .Select(x => new
             {
                 id = x.report.Id, score = x.result.Score, level = x.result.Level,

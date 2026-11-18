@@ -25,7 +25,7 @@ public class AdminAuthController(LostFoundDb db,IPasswordHasher<AppUser> passwor
            string.IsNullOrEmpty(user.PasswordHash) || string.IsNullOrEmpty(req.Password) ||
            passwordHasher.VerifyHashedPassword(user,user.PasswordHash,req.Password)==PasswordVerificationResult.Failed)
             return Unauthorized(new{message="Tài khoản hoặc mật khẩu quản trị không hợp lệ."});
-        var claims=new List<Claim>{new(ClaimTypes.NameIdentifier,user.Id.ToString()),new(ClaimTypes.Name,user.FullName),new(ClaimTypes.Role,user.Role)};
+        var claims=new List<Claim>{new(ClaimTypes.NameIdentifier,user.Id.ToString()),new(ClaimTypes.Name,user.FullName),new(ClaimTypes.Role,user.Role),new("foundly:session-version",user.SessionVersion.ToString())};
         await HttpContext.SignInAsync("AdminCookie",new ClaimsPrincipal(new ClaimsIdentity(claims,"AdminCookie")),new AuthenticationProperties{IsPersistent=false,ExpiresUtc=DateTimeOffset.UtcNow.AddHours(8)});
         return Ok(new{user=new{user.Id,user.Email,user.FullName,user.Role,user.DepartmentCode}});
     }

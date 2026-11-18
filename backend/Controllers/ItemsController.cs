@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using LostFound.Api.Data;
 using LostFound.Api.Domain;
+using LostFound.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -109,9 +110,14 @@ public class ItemsController(LostFoundDb db) : ControllerBase
             return BadRequest(new { message = "Địa điểm không tồn tại." });
         var entity = new ItemReport { UserId = UserId!.Value };
         Copy(entity, r);
+        await using var transaction = await db.Database.BeginTransactionAsync();
         db.Reports.Add(entity);
         await db.SaveChangesAsync();
-        // Bản Final gọi MatchEngine sau SaveChanges; matching không thuộc 3 Issue này.
+        var source = await db.Reports.AsNoTracking().Include(x => x.Location).Include(x => x.Category)
+            .SingleAsync(x => x.Id == entity.Id);
+        var matches = await MatchNotificationService.FindMatchesAsync(db, source, 50, HttpContext.RequestAborted);
+        await MatchNotificationService.RecordAsync(db, source, matches, HttpContext.RequestAborted);
+        await transaction.CommitAsync();
         return Created($"/api/items/{entity.Id}",
             new { id = entity.Id, message = "Đăng tin thành công." });
     }

@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Building2, Clock3, MapPin, MessageCircle, RefreshCw, Send, ShieldCheck} from 'lucide-react';
 import './supportInbox.css';
 
@@ -17,6 +17,8 @@ export default function SupportInbox({user}) {
   const [tab,setTab]=useState('inbox'),[threads,setThreads]=useState([]),[directory,setDirectory]=useState([]);
   const [active,setActive]=useState(null),[messages,setMessages]=useState([]),[draft,setDraft]=useState('');
   const [loading,setLoading]=useState(false),[sending,setSending]=useState(false),[error,setError]=useState('');
+  const activeRef=useRef(active);
+  activeRef.current=active;
   const refresh=useCallback(async()=>{
     setLoading(true);setError('');
     try{
@@ -24,18 +26,31 @@ export default function SupportInbox({user}) {
       const results=await Promise.all(calls);
       setDirectory(results[0].items||[]);
       const rows=results[1]?.items||[];
-      setThreads(rows);
+      setThreads(previous=>rows.map(row=>row.id===activeRef.current?{...row,hasUnread:false}:row));
       setActive(id=>rows.some(x=>x.id===id)?id:(rows[0]?.id||null));
     }catch(e){setError(e.message)}finally{setLoading(false)}
   },[user?.id]);
   useEffect(()=>{refresh()},[refresh]);
   const getMessages=useCallback(async()=>{
-    if(!active){setMessages([]);return;}
-    try{const result=await request(`/support/threads/${active}/messages`);setMessages(result.items||[])}
-    catch(e){setError(e.message)}
+    if(!active){setMessages([]);return true;}
+    try{
+      const result=await request(`/support/threads/${active}/messages`);
+      setMessages(result.items||[]);
+      setThreads(rows=>rows.map(row=>row.id===active?{...row,hasUnread:false}:row));
+      window.dispatchEvent(new Event('foundly:messages-read'));
+      return true;
+    }
+    catch(e){setError(e.message);return false}
   },[active]);
   useEffect(()=>{getMessages()},[getMessages]);
+  useEffect(()=>{
+    const timer=setInterval(()=>{refresh();getMessages()},12000);
+    return ()=>clearInterval(timer);
+  },[refresh,getMessages]);
   const thread=threads.find(t=>t.id===active);
+  const loadThreadMessages=async()=>{
+    if(await getMessages())setThreads(rows=>rows.map(row=>row.id===active?{...row,hasUnread:false}:row));
+  };
   const send=async e=>{
     e.preventDefault();if(!thread||!draft.trim()||sending)return;
     setSending(true);setError('');
@@ -52,8 +67,9 @@ export default function SupportInbox({user}) {
     {tab==='inbox' ? !user ? <p className="support-empty">Đăng nhập bằng email trường để xem các yêu cầu hỗ trợ của bạn.</p> :
       <div className="support-chat-layout"><aside className="support-threads">
         {loading&&<p>Đang tải...</p>}
-        {threads.map(t=><button key={t.id} className={active===t.id?'selected':''} onClick={()=>setActive(t.id)}>
-          <strong>{t.title}</strong><small>{dept[t.department]||'Hỗ trợ'} · {when(t.lastMessageAt)}</small></button>)}
+        {threads.map(t=><button key={t.id} className={active===t.id?'selected':''} onClick={()=>{if(active===t.id)getMessages();else setActive(t.id)}}>
+          <strong>{t.title}</strong><small>{dept[t.department]||'Hỗ trợ'} · {when(t.lastMessageAt)}</small>
+          {t.hasUnread&&<i className="unread-dot" aria-label="Có tin nhắn chưa đọc"/>}</button>)}
         {!loading&&!threads.length&&<p>Chưa có hồ sơ hỗ trợ. Hãy gửi phản ánh trong Phòng bàn giao hoặc tạo yêu cầu ký gửi để bắt đầu.</p>}
       </aside><section className="support-conversation">
         <header><h2>{thread?.title||'Chọn một yêu cầu'}</h2><p>{thread?.routingNote||'Chỉ các hồ sơ hợp lệ mới có quyền trao đổi.'}</p></header>
@@ -62,7 +78,7 @@ export default function SupportInbox({user}) {
           {!messages.length&&<p className="support-empty">{thread?'Chưa có tin nhắn. Bạn có thể hỏi về tiến độ hồ sơ.':'Chọn một hồ sơ ở bên trái.'}</p>}</div>
         {thread&&<form className="support-send" onSubmit={send}><input maxLength={1500} value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Nhập câu hỏi về hồ sơ..." aria-label="Nội dung gửi hỗ trợ" disabled={sending}/>
           <button type="submit" disabled={sending||!draft.trim()}><Send size={16}/>{sending?'Đang gửi':'Gửi'}</button></form>}
-        {thread&&<button className="support-refresh-messages" onClick={getMessages}>Làm mới tin nhắn</button>}
+        {thread&&<button className="support-refresh-messages" onClick={loadThreadMessages}>Làm mới tin nhắn</button>}
       </section></div> : <div className="support-directory">{directory.map(d=><article key={d.id} className="support-office"><Building2 size={22}/><h3>{d.name}</h3>
         <p><MapPin size={15}/>{d.location}</p><p><Clock3 size={15}/>{d.officeHours}</p>
         <small>Máy nội bộ: {d.internalPhone||'Chưa có'}</small>
