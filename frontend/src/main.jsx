@@ -54,7 +54,9 @@ function App(){
     let active=true;
     const check=async()=>{try{const [items,matchStats]=await Promise.all([api('/notifications'),api('/notifications/matches/unread').catch(()=>({count:0}))]);if(active){setNotifications(items);setMatchingUnread(matchStats.count||0);}}catch{}};
     const timer=setInterval(check,12000);
-    return ()=>{active=false;clearInterval(timer);};
+    const onRead=()=>check();
+    window.addEventListener('foundly:messages-read',onRead);
+    return ()=>{active=false;clearInterval(timer);window.removeEventListener('foundly:messages-read',onRead);};
   },[me?.id]);
   useEffect(()=>{if(page==='discover')loadReports().catch(()=>{});else if(page==='mine')loadMine().catch(()=>{});else if(page==='matching'&&me)loadMine().catch(()=>{});else if(fullBackend&&page==='claims')loadClaims().catch(()=>{});else if(fullBackend&&page==='notifications')loadNotifs().catch(()=>{});},[page]);
   useEffect(()=>{if(page==='matching'&&me&&mine.length&&!selectedMine){const first=mine.find(r=>r.status==='OPEN');if(first)getMatches(first.id);}},[page,me,mine,selectedMine]);
@@ -102,11 +104,11 @@ function App(){
       <nav className={'nav '+(mobileNav?'navopen':'')}>
         <button className={page==='discover'?'active':''} onClick={()=>goto('discover')}>Khám phá</button>
         <button className={page==='mine'?'active':''} onClick={()=>me?goto('mine'):openAuth()}>Bài của tôi</button>
-        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp{fullBackend&&matchingUnread>0&&<span className="soon-label">{matchingUnread}</span>}</button>
+        <button className={page==='matching'||page==='upcoming-matching'?'active':''} onClick={()=>gotoFeature('matching')}>Gợi ý phù hợp{fullBackend&&matchingUnread>0&&<i className="dot message-dot" aria-label="Có gợi ý mới"/>}</button>
         <button className={page==='claims'||page==='upcoming-claims'?'active':''} onClick={()=>gotoFeature('claims')}>Yêu cầu nhận đồ{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
         <button className={page==='operations'||page==='upcoming-operations'?'active':''} onClick={()=>gotoFeature('operations')}>Hỗ trợ & ký gửi{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
-        <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
-        <button className={page==='contacts'?'active':''} onClick={()=>goto('contacts')}>Hỗ trợ & Danh bạ</button>
+        <button className={page==='handovers'||page==='upcoming-handovers'?'active':''} onClick={()=>gotoFeature('handovers')}>Phòng bàn giao{fullBackend&&notifications.some(x=>x.type==='MESSAGE'&&!x.isRead)&&<i className="dot message-dot" aria-label="Có tin nhắn mới"/>}{!fullBackend&&<span className="soon-label">Sắp có</span>}</button>
+        <button className={page==='contacts'?'active':''} onClick={()=>goto('contacts')}>Hỗ trợ & Danh bạ{fullBackend&&notifications.some(x=>x.type==='SUPPORT'&&!x.isRead)&&<i className="dot message-dot" aria-label="Có tin nhắn mới"/>}</button>
         <div className="mobile-nav-actions">
           <button type="button" className="mobile-post" onClick={()=>{setMobileNav(false);openPost('LOST')}}><Plus size={16}/> Đăng tin</button>
           {!me&&<>
@@ -191,7 +193,12 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   const loadActive=async(id)=>{
     if(!id)return;
     const [details,history]=await Promise.all([api(`/handovers/${id}`),api(`/handovers/${id}/messages`)]);
-    if(roomIdRef.current===id){setRoom(details||null);setMessages(Array.isArray(history)?history.filter(Boolean):[]);}
+    if(roomIdRef.current===id){
+      setRoom(details||null);
+      setMessages(Array.isArray(history)?history.filter(Boolean):[]);
+      setRooms(current=>current.map(item=>item.id===id?{...item,hasUnread:false}:item));
+      window.dispatchEvent(new Event('foundly:messages-read'));
+    }
   };
   useEffect(()=>{appliedClaimRef.current=false;loadRooms().catch(e=>{setLoading(false);notify(e.message,true)});},[selectedClaimId,user?.id]);
   useEffect(()=>{
@@ -224,7 +231,7 @@ function HandoverHub({user,selectedClaimId,notify,onRefresh,onOpenSupport}) {
   return <section className="container privatepage handover-page"><PageHeader kicker="BÀN GIAO AN TOÀN" title="Phòng bàn giao" subtitle="Chỉ hai tài khoản liên quan được nhắn tin, hẹn gặp và cùng xác nhận hoàn trả. Không hiển thị thông tin liên hệ cá nhân."/>
     <div className="handover-layout">
       <aside className="handover-sidebar"><h3><MessagesSquare size={18}/> Các phòng của bạn</h3>
-        {rooms.filter(Boolean).map(r=><button key={r.id} className={'room-choice '+(active===r.id?'selected':'')} onClick={()=>setActive(r.id)}><strong>{r?.itemName||'Vật phẩm bàn giao'}</strong><span>{r?.myRole==='HOLDER'?'Bạn là người nhặt':'Bạn là người mất'} · {(r?.myRole==='HOLDER'?r?.claimant?.fullName:r?.holder?.fullName)||'Người dùng'}</span><small>{r?.status==='COMPLETED'?'✓ Đã hoàn tất':r?.status==='SCHEDULED'?'Đã chốt lịch':r?.status==='AWAITING_CONFIRMATION'?'Chờ xác nhận':'Đang hẹn bàn giao'}</small></button>)}
+        {rooms.filter(Boolean).map(r=><button key={r.id} className={'room-choice '+(active===r.id?'selected':'')} onClick={()=>{if(active===r.id)loadActive(r.id).catch(e=>notify(e.message,true));else setActive(r.id)}}><strong>{r?.itemName||'Vật phẩm bàn giao'}</strong><span>{r?.myRole==='HOLDER'?'Bạn là người nhặt':'Bạn là người mất'} · {(r?.myRole==='HOLDER'?r?.claimant?.fullName:r?.holder?.fullName)||'Người dùng'}</span><small>{r?.status==='COMPLETED'?'✓ Đã hoàn tất':r?.status==='SCHEDULED'?'Đã chốt lịch':r?.status==='AWAITING_CONFIRMATION'?'Chờ xác nhận':'Đang hẹn bàn giao'}</small>{r?.hasUnread&&<i className="unread-dot" aria-label="Có tin nhắn chưa đọc"/>}</button>)}
         {!rooms.length&&<p className="handover-muted">{loading?'Đang tải phòng...':'Chưa có phòng. Khi yêu cầu nhận đồ được duyệt, phòng riêng sẽ xuất hiện ở đây.'}</p>}
       </aside>
       <div className="handover-main">
