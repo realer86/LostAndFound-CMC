@@ -4,6 +4,7 @@ import { Search, Plus, Bell, Menu, MapPin, CalendarDays, ArrowUpRight, ArrowRigh
 import './style.css';
 import SupportInbox from './components/SupportInbox.jsx';
 import MatchingPanel from './components/MatchingPanel.jsx';
+import PostRatingBox from "./components/PostRatingBox.jsx";
 
 // Claims, custody, notifications and handovers are served by the existing backend.
 const fullBackend = true;
@@ -35,9 +36,9 @@ function App(){
   const [myClaims,setMyClaims]=useState([]),[inbox,setInbox]=useState([]);
   const [selectedClaimRoom,setSelectedClaimRoom]=useState(null);
   const [busy,setBusy]=useState(false),[notice,setNotice]=useState(null),[mobileNav,setMobileNav]=useState(false),[count,setCount]=useState(0);
-  const sessionKeyRef=useRef(0); // Prevent old account responses from overwriting a switched account.
-  const reportsRequestRef=useRef(0); // Only the newest search/filter response may update the feed.
-  const matchingRequestRef=useRef(0); // Ignore old matching results after switching reports/accounts.
+  const sessionKeyRef=useRef(0);
+  const reportsRequestRef=useRef(0);
+  const matchingRequestRef=useRef(0);
   const notify=(text,error=false)=>{setNotice({text,error});setTimeout(()=>setNotice(null),4800)};
   const request=async(fn)=>{setBusy(true);try{await fn();}catch(err){notify(err.message,true);}finally{setBusy(false);}};
   const loadReports=async(index=1)=>{const requestId=++reportsRequestRef.current;const result=await api(`/reports?type=${filter==='ALL'?'':filter}&q=${encodeURIComponent(search)}&page=${index}`);if(requestId!==reportsRequestRef.current)return;setReports(previous=>index===1?result.items:[...previous,...result.items]);setCount(result.total);setReportPage(index)};
@@ -48,11 +49,10 @@ function App(){
   useEffect(()=>{api('/auth/me').then(data=>setMe(data.user)).catch(()=>{});api('/reports/catalog').then(setCatalog).catch(()=>{});},[]);
   useEffect(()=>{loadReports().catch(err=>notify(err.message,true))},[filter,search]);
   useEffect(()=>{if(me){Promise.all(fullBackend?[loadMine(),loadNotifs(),loadClaims()]:[loadMine()]).catch(()=>{});}else{setMine([]);setMatches([]);matchingRequestRef.current++;setSelectedMine(null);setNotifications([]);setMyClaims([]);setInbox([]);}},[me]);
-  // Refresh the notification bell automatically, including when someone posts in another session.
   useEffect(()=>{
     if(!fullBackend||!me?.id)return;
     let active=true;
-    const check=async()=>{try{const items=await api('/notifications');if(active)setNotifications(items);}catch{/* Session may have expired; the next login refreshes notifications. */}};
+    const check=async()=>{try{const items=await api('/notifications');if(active)setNotifications(items);}catch{}};
     const timer=setInterval(check,12000);
     return ()=>{active=false;clearInterval(timer);};
   },[me?.id]);
@@ -63,13 +63,11 @@ function App(){
   const openPost=(type='LOST')=>{if(!me){openAuth();return;}setEditingReport(null);setShowPost(type)};
   const editPost=r=>{setEditingReport(r);setShowPost(r.type)};
   const goto=(name)=>{setPage(name);setMobileNav(false);window.scrollTo({top:0,behavior:'smooth'})};
-  // Requests require a signed-in school account and are validated on the backend.
   const gotoFeature=(name)=>{
     if(!fullBackend && upcomingFeatures[name]) { goto('upcoming-'+name); return; }
     if(!me) { openAuth(); return; }
     goto(name);
   };
-  // Matching is available on main, without Google OAuth or REQ-04.
   const openMatches=async(id)=>{
     const requestId=++matchingRequestRef.current;
     setSelectedMine(id);
@@ -90,7 +88,6 @@ function App(){
   const logout=()=>request(async()=>{
     await api('/auth/logout',{method:'POST'});
     sessionKeyRef.current++;matchingRequestRef.current++;
-    // Clear every personal view to prevent the previous user's data lingering after account switching.
     setMe(null);setNotifications([]);setMine([]);setMatches([]);setSelectedMine(null);
     setMyClaims([]);setInbox([]);
     setSelected(null);setShowAuth(false);setShowPost(false);setEditingReport(null);
@@ -140,7 +137,7 @@ function App(){
       <section className="searchsection container"><div className="searchpanel"><div className="searchbox"><Search size={20}/><input placeholder="Tìm điện thoại, ví, thẻ sinh viên, chìa khóa..." value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button className="tinyx" onClick={()=>setSearch('')}><X size={16}/></button>}</div><button className="btn primary searchbtn" onClick={()=>loadReports()}><Search size={18}/> Tìm kiếm</button></div></section>
       <section className="container feed"><div className="sectionheading"><div><span className="kicker">CẬP NHẬT MỚI NHẤT</span><h2>Đồ thất lạc quanh bạn</h2><p>Khám phá những món đồ vừa được đăng trong cộng đồng.</p></div><div className="counttag">{count} bài đăng</div></div>
       <div className="filters">{categories.map(([id,label])=><button key={id} className={'filterpill '+(filter===id?'on':'')} onClick={()=>setFilter(id)}>{id==='ALL'?<SlidersHorizontal size={15}/>:id==='LOST'?<PackageOpen size={15}/>:<PackageCheck size={15}/>} {label}</button>)}<button className="refresh" onClick={()=>refresh().catch(err=>notify(err.message,true))}><RefreshCcw size={15}/> Làm mới</button></div>
-      <div className="cardgrid">{reports.map(r=><ReportCard key={r.id} report={r} onClick={()=>setSelected(r)} />)}</div>
+      <div className="cardgrid">{reports.map(r=><div key={r.id} className="mycard" style={{display:'flex',flexDirection:'column',justifyContent:'space-between'}}><ReportCard report={r} onClick={()=>setSelected(r)} /><div style={{padding:'0 14px 14px'}}><PostRatingBox itemId={r.id} currentUser={me} myReports={mine} reportOwnerId={r.userId} reportType={r.type}/></div></div>)}</div>
       {reports.length===0&&<Empty icon={<Search/>} title="Chưa tìm thấy bài đăng phù hợp" detail="Thử một từ khóa khác hoặc đổi bộ lọc."/>}{reports.length<count&&<div className="loadmore"><button className="btn outline" onClick={()=>loadReports(reportPage+1).catch(e=>notify(e.message,true))}>Xem thêm bài đăng <ArrowRight size={16}/></button></div>}
       </section><section className="how"><div className="container"><span className="kicker">CÁCH FOUNDLY HOẠT ĐỘNG</span><h2>Ba bước để tìm lại đồ</h2><div className="steps"><div><span>01</span><PackageOpen size={26}/><h3>Đăng thông tin</h3><p>Chọn mất đồ hoặc nhặt được, mô tả đặc điểm và khu vực.</p></div><div><span>02</span><Sparkles size={26}/><h3>Nhận gợi ý</h3><p>{fullBackend?'Hệ thống so sánh nhiều đặc điểm, cả khi thứ tự đăng bài khác nhau.':'So khớp nhiều đặc điểm, kể cả khi tên gọi hoặc mô tả khác nhau.'}</p></div><div><span>03</span><ShieldCheck size={26}/><h3>Xác minh & nhận lại</h3><p>{fullBackend?'Cung cấp bằng chứng riêng tư trước khi hai bên xác nhận bàn giao.':'Chỉ khả dụng khi tích hợp claim và bàn giao.'}</p></div></div></div></section>
     </>}
@@ -155,7 +152,7 @@ function App(){
         </div>
       </section>;
     })()}
-    {page==='mine'&&<section className="container privatepage"><PageHeader kicker="KHÔNG GIAN CỦA BẠN" title="Bài đăng của tôi" subtitle="Theo dõi bài đăng và gợi ý phù hợp; liên hệ hỗ trợ khi có hồ sơ hợp lệ." action={<button className="btn primary" onClick={()=>openPost('LOST')}><Plus size={16}/> Đăng bài mới</button>}/><div className="cardgrid">{mine.map(r=><div key={r.id} className="mycard"><ReportCard report={r} onClick={()=>setSelected(r)}/><div className="cardactions"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><button type="button" onClick={()=>getMatches(r.id)}><Sparkles size={15}/> Gợi ý</button>{fullBackend&&r.status==='EXPIRED'&&<button onClick={()=>request(async()=>{await api(`/operations/reports/${r.id}/renew`,{method:'PATCH'});notify('Đã gia hạn bài thêm 30 ngày.');await refresh()})}>Gia hạn</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>editPost(r)}><Eye size={14}/> Sửa</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>request(async()=>{await api(`/reports/${r.id}/close`,{method:'PATCH'});notify('Đã đóng bài');await refresh()})}><X size={14}/> Đóng bài</button>}{!fullBackend&&r.status==='OPEN'&&<button type="button" onClick={()=>request(async()=>{if(!window.confirm('Xác nhận vật phẩm đã được hoàn trả?'))return;await api(`/reports/${r.id}/status`,{method:'PATCH'});await refresh();notify('Đã đánh dấu hoàn trả')})}><CheckCheck size={15}/> Đã hoàn trả</button>}</div></div>)}</div>{mine.length===0&&<Empty icon={<PackageOpen/>} title="Chưa có bài đăng nào" detail="Đăng thông tin về đồ bạn mất hoặc nhặt được."/>}</section>}
+    {page==='mine'&&<section className="container privatepage"><PageHeader kicker="KHÔNG GIAN CỦA BẠN" title="Bài đăng của tôi" subtitle="Theo dõi bài đăng và gợi ý phù hợp; liên hệ hỗ trợ khi có hồ sơ hợp lệ." action={<button className="btn primary" onClick={()=>openPost('LOST')}><Plus size={16}/> Đăng bài mới</button>}/><div className="cardgrid">{mine.map(r=><div key={r.id} className="mycard"><ReportCard report={r} onClick={()=>setSelected(r)}/><div style={{padding:'0 14px 10px'}}><PostRatingBox itemId={r.id} currentUser={me} myReports={mine} reportOwnerId={r.userId} reportType={r.type}/></div><div className="cardactions"><span className={'status '+r.status.toLowerCase()}>{r.status}</span><button type="button" onClick={()=>getMatches(r.id)}><Sparkles size={15}/> Gợi ý</button>{fullBackend&&r.status==='EXPIRED'&&<button onClick={()=>request(async()=>{await api(`/operations/reports/${r.id}/renew`,{method:'PATCH'});notify('Đã gia hạn bài thêm 30 ngày.');await refresh()})}>Gia hạn</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>editPost(r)}><Eye size={14}/> Sửa</button>}{fullBackend&&r.status==='OPEN'&&<button onClick={()=>request(async()=>{await api(`/reports/${r.id}/close`,{method:'PATCH'});notify('Đã đóng bài');await refresh()})}><X size={14}/> Đóng bài</button>}{!fullBackend&&r.status==='OPEN'&&<button type="button" onClick={()=>request(async()=>{if(!window.confirm('Xác nhận vật phẩm đã được hoàn trả?'))return;await api(`/reports/${r.id}/status`,{method:'PATCH'});await refresh();notify('Đã đánh dấu hoàn trả')})}><CheckCheck size={15}/> Đã hoàn trả</button>}</div></div>)}</div>{mine.length===0&&<Empty icon={<PackageOpen/>} title="Chưa có bài đăng nào" detail="Đăng thông tin về đồ bạn mất hoặc nhặt được."/>}</section>}
     {page==='matching'&&<MatchingPanel mine={mine} selectedId={selectedMine} matches={matches} loading={matchingLoading} onSelect={getMatches} onOpen={setSelected} onExplore={(type)=>{setSearch('');setFilter(type==='LOST'?'FOUND':'LOST');goto('discover');}}/>}
     {page==='claims'&&<section className="container privatepage"><PageHeader kicker="XÁC MINH AN TOÀN" title="Yêu cầu nhận đồ" subtitle="Bằng chứng chỉ hiển thị cho người liên quan và quản trị viên."/><div className="sectionheading minor"><h3>Yêu cầu bạn đã gửi</h3></div><div className="listpanel">{myClaims.map(c=><ClaimRow key={c.id} c={c} onRoom={()=>{setSelectedClaimRoom(c.id);goto('handovers')}} onAct={action=>request(async()=>{if(action==='withdraw'){await api(`/claims/${c.id}/withdraw`,{method:'POST'});notify('Đã rút yêu cầu.');await refresh()}})}/>)}{myClaims.length===0&&<p className="muted padded">Bạn chưa gửi yêu cầu nhận đồ nào.</p>}</div><div className="sectionheading minor"><h3>Yêu cầu cần bạn xét duyệt</h3></div><div className="listpanel">{inbox.map(c=><ClaimRow key={c.id} c={c} inbox onRoom={()=>{setSelectedClaimRoom(c.id);goto('handovers')}} onAct={(action)=>request(async()=>{if(action==='revoke'){const reason=window.prompt('Lý do hủy chấp thuận (tối thiểu 10 ký tự):');if(!reason)return;await api(`/claims/${c.id}/revoke`,{method:'POST',body:JSON.stringify({reason})})}else{await api(`/claims/${c.id}/review`,{method:'PATCH',body:JSON.stringify({approve:action==='approve'})})}notify('Đã cập nhật yêu cầu');await refresh()})}/>)}{inbox.length===0&&<p className="muted padded">Chưa có yêu cầu cần xét duyệt.</p>}</div></section>}
     {page==='operations'&&me&&<OperationsHub mine={mine} notify={notify} onRefresh={refresh} onOpenSupport={()=>goto('contacts')} onOpenHandover={(claimId)=>{setSelectedClaimRoom(claimId||null);goto('handovers')}}/>}
@@ -318,7 +315,6 @@ function PageHeader({kicker,title,subtitle,action}){return <div className="pageh
 function ReportCard({report:r,onClick}){const cover=r.images?.[0];const returned=r.status==='RETURNED';return <button className={'reportcard '+(returned?'returned-card':'')} onClick={onClick}><div className={'cardphoto '+(isFound(r.type)?'aqua':'sand')}>{cover?<img src={cover} alt={r.itemName} loading="lazy"/>:<div className="itememoji">{r.category==='Điện tử'?'📱':r.category==='Giấy tờ'?'🪪':r.category==='Ví & túi'?'👛':r.category==='Chìa khóa'?'🔑':'🎒'}</div>}<span className={'reportbadge '+(returned?'returned':(isFound(r.type)?'found':'lost'))}>{returned?'ĐÃ TRẢ':isFound(r.type)?'ĐÃ NHẶT ĐƯỢC':'ĐANG TÌM'}</span></div><div className="cardbody"><div className="cardmeta"><span>{r.category||'Vật dụng khác'}</span><span>·</span><span>{time(r.createdAt).split(',')[0]}</span></div><h3>{r.itemName}</h3><p>{r.description||'Chưa có mô tả bổ sung.'}</p><div className="cardbottom"><span><MapPin size={15}/> {r.location||r.locationDetail||'Chưa rõ khu vực'}</span><ArrowUpRight size={17}/></div></div></button>}
 function Empty({icon,title,detail}){return <div className="emptystate"><span>{icon}</span><h3>{title}</h3><p>{detail}</p></div>}
 function Modal({children,onClose,wide}){useEffect(()=>{const f=e=>{if(e.key==='Escape')onClose()};document.addEventListener('keydown',f);document.body.style.overflow='hidden';return()=>{document.removeEventListener('keydown',f);document.body.style.overflow=''}},[onClose]);return <div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><div className={'modal '+(wide?'wide':'')}><button className="modalclose" onClick={onClose}><X size={19}/></button>{children}</div></div>}
-// Google's browser SDK only provides an ID token. The backend validates it with Google.
 function GoogleSignIn({onSuccess,request}){
  const clientId=import.meta.env.VITE_GOOGLE_CLIENT_ID;
  const mount=useRef(null);

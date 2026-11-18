@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS "PostRatings" (
+    "Id" SERIAL PRIMARY KEY,
+    "ItemId" INT NOT NULL,
+    "UserName" VARCHAR(255) NOT NULL,
+    "Stars" INT NOT NULL CHECK ("Stars" >= 1 AND "Stars" <= 5),
+    "Comment" VARCHAR(500),
+    "CreatedAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);

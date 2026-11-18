@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LostFound.Api.Data;
 
-// Trích từ LostFoundDb.cs của bản Final: các bảng trong phạm vi thiết kế Sprint 1.
 public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(options)
 {
+    public DbSet<PostRating> PostRatings => Set<PostRating>();
     public DbSet<AppUser> Users => Set<AppUser>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<CampusLocation> Locations => Set<CampusLocation>();
@@ -17,8 +17,7 @@ public class LostFoundDb(DbContextOptions<LostFoundDb> options) : DbContext(opti
     public DbSet<HandoverMessage> HandoverMessages => Set<HandoverMessage>();
     public DbSet<HandoverAppointment> HandoverAppointments => Set<HandoverAppointment>();
     public DbSet<Notification> Notifications => Set<Notification>();
-    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
-    public DbSet<CustodyRecord> CustodyRecords => Set<CustodyRecord>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();    public DbSet<CustodyRecord> CustodyRecords => Set<CustodyRecord>();
 
     public DbSet<SupportThread> SupportThreads => Set<SupportThread>();
     public DbSet<SupportMessage> SupportMessages => Set<SupportMessage>();

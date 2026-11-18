@@ -1,6 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {Activity, AlertCircle, ArrowDownRight, ArrowRight, BarChart3, Bell, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, ClipboardCheck, Clock3, MessagesSquare, FileText, LayoutDashboard, LockKeyhole, LogOut, Menu, Package, PackageCheck, RefreshCw, Search, Shield, ShieldCheck, Users, X} from 'lucide-react';
+import {Activity, AlertCircle, ArrowDownRight, ArrowRight, BarChart3, Bell, CheckCircle2, ChevronLeft, ChevronRight, CircleHelp, ClipboardCheck, Clock3, Download, Eye, EyeOff, MessagesSquare, FileText, LayoutDashboard, LockKeyhole, LogOut, Menu, Package, PackageCheck, RefreshCw, Search, Shield, ShieldCheck, Users, X} from 'lucide-react';
 import './style.css';
 import SupportAdminInbox from './SupportAdminInbox.jsx';
 
@@ -18,6 +18,56 @@ const statusLabel={OPEN:'Đang mở',CLOSED:'Đã đóng',RETURNED:'Đã bàn gi
 function Tag({value}){return <span className={'tag '+(value||'').toLowerCase()}>{statusLabel[value]||value||'—'}</span>}
 function Blank({message='Chưa có dữ liệu trong mục này.'}){return <div className="blank"><Package size={28}/><strong>Chưa có dữ liệu</strong><span>{message}</span></div>}
 function Pager({page,total,pageSize,onChange}){const pages=Math.max(1,Math.ceil(total/pageSize));return <div className="pager"><span>Trang {page}/{pages} · {total} bản ghi</span><div><button disabled={page<=1} onClick={()=>onChange(page-1)} title="Trang trước"><ChevronLeft size={17}/></button><button disabled={page>=pages} onClick={()=>onChange(page+1)} title="Trang tiếp"><ChevronRight size={17}/></button></div></div>}
+
+function ExportReturnedAdminButton({ onFlash, disabled }) {
+  const [exporting, setExporting] = useState(false);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const response = await fetch('/api/items/export-returned', {
+        credentials: 'same-origin',
+      });
+      if (!response.ok) {
+        throw new Error(`Không thể xuất file (HTTP ${response.status})`);
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `ThongKe_DoDaTra_CMC_${dateStr}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      onFlash?.('Đã xuất file thống kê đồ đã trao trả (.csv).');
+    } catch (err) {
+      onFlash?.(err.message || 'Lỗi khi xuất file thống kê đồ đã trả.', true);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className="refresh"
+      disabled={disabled || exporting}
+      onClick={handleExport}
+      title="Xuất danh sách các món đồ đã trao trả ra file Excel/CSV để thống kê"
+      style={{
+        backgroundColor: '#0d9488',
+        color: '#ffffff',
+        borderColor: '#0d9488',
+      }}
+    >
+      <Download size={17} />
+      <span>{exporting ? 'Đang xuất...' : 'Xuất file đồ đã trả'}</span>
+    </button>
+  );
+}
+
 function Login({onLogin}){
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[showPassword,setShowPassword]=useState(false),[error,setError]=useState(''),[pending,setPending]=useState(false);
   async function submit(event){event.preventDefault();setError('');setPending(true);try{const result=await api('/admin/auth/login',{method:'POST',body:JSON.stringify({email,password})});onLogin(result.user);}catch(e){setError(e.message)}finally{setPending(false)}}
@@ -50,7 +100,7 @@ function App(){
   return <div className="shell">
     <aside className={'sidebar '+(menuOpen?'opened':'')}><div className="side-logo"><div className="logo-icon"><ShieldCheck size={23}/></div><div><strong>foundly<span className="logo-suffix">/admin</span></strong><small>MANAGEMENT CONSOLE</small></div><button className="mobile-close" onClick={()=>setMenuOpen(false)}><X size={20}/></button></div><div className="nav-head">ĐIỀU HÀNH HỆ THỐNG</div><nav>{nav.filter(entry=>user.role==='ADMIN'||entry.id==='support').map(({id,label,Icon})=><button key={id} className={'side-link '+(page===id?'selected':'')} onClick={()=>open(id)}><Icon size={19}/>{label}{page===id&&<span className="active-indicator"/>}</button>)}</nav><div className="sidebar-foot"><div className="side-secure"><Shield size={18}/><span>Phiên quản trị riêng biệt, API được bảo vệ theo vai trò.</span></div><a href={FRONTEND_URL} className="backsite"><ArrowDownRight size={16}/> Website sinh viên</a></div></aside>
     <div className="main-shell"><header className="topbar"><div className="top-left"><button className="menu-toggle" onClick={()=>setMenuOpen(!menuOpen)}><Menu size={21}/></button><div className="crumb">Foundly <span>/</span> {nav.find(n=>n.id===page)?.label}</div></div><div className="top-right"><span className="local-dot">Localhost</span><div className="admin-profile"><div className="admin-avatar">{user.role==='STAFF'?'S':'A'}</div><div><strong>{user.fullName}</strong><small>{user.role==='STAFF'?('Nhân viên · '+user.departmentCode):'Quản trị viên'}</small></div></div><button className="logout" onClick={logout} title="Đăng xuất quản trị" disabled={busy}><LogOut size={18}/><span>Đăng xuất</span></button></div></header>
-    <main className="content"><div className="page-heading"><div><span className="micro">FOUNDLY OPERATIONS</span><h1>{nav.find(n=>n.id===page)?.label}</h1><p>{({overview:'Bức tranh tổng quan về hoạt động đồ thất lạc trong cộng đồng.',reports:'Kiểm duyệt và thay đổi trạng thái bài đăng trong hệ thống.',users:'Tra cứu tài khoản và hoạt động bài đăng của người dùng.',claims:'Theo dõi yêu cầu xác minh và bằng chứng sở hữu riêng tư.',handovers:'Theo dõi tình trạng bàn giao, không đọc tin nhắn riêng tư.',cases:'Xem phản ánh vi phạm, giải quyết tranh chấp và ghi quyết định xử lý.',custody:'Tiếp nhận đồ tại quầy bảo vệ, cấp mã biên nhận và ghi nhận trao lại.',support:'Phản hồi người gửi báo cáo hoặc ký gửi. Admin tiếp nhận và điều phối tới các quầy.',audit:'Lịch sử những thao tác quan trọng đã được ghi nhận.'})[page]}</p></div><button className="refresh" disabled={busy} onClick={()=>action(async()=>{if(page==='overview')setStats(await api('/admin/stats'));else await load();flash('Dữ liệu đã được làm mới')})}><RefreshCw size={17}/> Làm mới</button></div>
+    <main className="content"><div className="page-heading"><div><span className="micro">FOUNDLY OPERATIONS</span><h1>{nav.find(n=>n.id===page)?.label}</h1><p>{({overview:'Bức tranh tổng quan về hoạt động đồ thất lạc trong cộng đồng.',reports:'Kiểm duyệt và thay đổi trạng thái bài đăng trong hệ thống.',users:'Tra cứu tài khoản và hoạt động bài đăng của người dùng.',claims:'Theo dõi yêu cầu xác minh và bằng chứng sở hữu riêng tư.',handovers:'Theo dõi tình trạng bàn giao, không đọc tin nhắn riêng tư.',cases:'Xem phản ánh vi phạm, giải quyết tranh chấp và ghi quyết định xử lý.',custody:'Tiếp nhận đồ tại quầy bảo vệ, cấp mã biên nhận và ghi nhận trao lại.',support:'Phản hồi người gửi báo cáo hoặc ký gửi. Admin tiếp nhận và điều phối tới các quầy.',audit:'Lịch sử những thao tác quan trọng đã được ghi nhận.'})[page]}</p></div><div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>{user.role==='ADMIN'&&(page==='overview'||page==='reports')&&<ExportReturnedAdminButton onFlash={flash} disabled={busy}/>}<button className="refresh" disabled={busy} onClick={()=>action(async()=>{if(page==='overview')setStats(await api('/admin/stats'));else await load();flash('Dữ liệu đã được làm mới')})}><RefreshCw size={17}/> Làm mới</button></div></div>
     {page==='overview'?<Overview stats={stats} go={open}/>:page==='support'?<SupportAdminInbox user={user}/>:<>
       <div className="toolbar">{(page==='reports'||page==='users')&&<div className="search"><Search size={17}/><input placeholder={page==='users'?'Tìm tên hoặc email...':'Tìm tên vật phẩm, mô tả...'} value={query} onChange={e=>setQuery(e.target.value)}/></div>}
       {page==='reports'&&<select aria-label="Loại bài" value={filter} onChange={e=>setFilter(e.target.value)}><option value="ALL">Tất cả loại bài</option><option value="LOST">LOST · Báo mất</option><option value="FOUND">FOUND · Nhặt được</option></select>}

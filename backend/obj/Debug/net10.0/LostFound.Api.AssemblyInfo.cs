@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LostFound.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2ad1fa95f583b5f0be9fedf1fe36d7591803bef2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ff7e156df72daab7dc18d1640eee90da7ddc1949")]
 [assembly: System.Reflection.AssemblyProductAttribute("LostFound.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LostFound.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
