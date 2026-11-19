@@ -1,0 +1,99 @@
+/* 1. Định nghĩa bảng màu mặc định (Light Mode) */
+:root {
+  --bg-primary: #f8fafc;
+  --bg-surface: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --accent-color: #2563eb;
+  --accent-hover: #1d4ed8;
+  --border-color: #e2e8f0;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* 2. Ghi đè biến màu khi kích hoạt Dark Mode */
+[data-theme="dark"] {
+  --bg-primary: #0f172a;      /* Nền chính: Xanh đen sâu */
+  --bg-surface: #1e293b;     /* Nền thẻ (Card): Sáng hơn nền chính để tạo khối */
+  --text-primary: #f8fafc;    /* Chữ chính: Trắng ngà (giảm độ chói) */
+  --text-secondary: #94a3b8;  /* Chữ phụ: Xám nhạt */
+  --accent-color: #3b82f6;    /* Màu nhấn sáng hơn một chút để nổi bật trên nền tối */
+  --accent-hover: #60a5fa;
+  --border-color: #334155;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+}
+
+/* 3. Áp dụng biến vào giao diện */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  /* Hiệu ứng chuyển màu mượt mà */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 5%;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.container {
+  max-width: 800px;
+  margin: 3rem auto;
+  padding: 0 1rem;
+}
+
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: var(--shadow);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.card p {
+  color: var(--text-secondary);
+  margin: 1rem 0 1.5rem;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+  border-radius: 8px;
+  padding: 0.6rem 1.2rem;
+  transition: all 0.2s ease;
+}
+
+#theme-toggle {
+  background-color: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+#theme-toggle:hover {
+  background-color: var(--bg-primary);
+}
+
+.btn-primary {
+  background-color: var(--accent-color);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+}
