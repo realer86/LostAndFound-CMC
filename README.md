@@ -21,7 +21,7 @@ Dự án được thực hiện trong khuôn khổ môn học **Công nghệ ph�
 *(Lưu ý: Xóa hoặc sửa các công nghệ dưới đây cho đúng với project của nhóm)*
 - **Frontend:** HTML5, CSS3, JavaScript 
 - **Backend:** Node.js / C++ / Java
-- **Cơ sở dữ liệu:** SQL Server (Thiết kế chuẩn hóa 3NF)
+- **Cơ sở dữ liệu:**PostgreSQL
 - **Quản lý mã nguồn & Tiến độ:** Git, GitHub (Pull Request, Branching), Kanban Board.
 
 ## 🚀 Hướng dẫn cài đặt và chạy dự án
